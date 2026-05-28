@@ -1,0 +1,288 @@
+{
+  "world": {
+    "name": "The Wizarding World",
+    "description": "A hidden magical society that exists alongside the Muggle world. Witches and wizards live in secret, protected by spells of concealment. Dark magic stirs again as ancient threats resurface in the shadows.",
+    "age": "Post-Voldemort Era — A New Dark Threat Rises",
+    "tone": "Magical mystery, wonder, danger, friendship, and courage",
+    "rules": [
+      "Magic is real and governed by wand lore and intent",
+      "Three Unforgivable Curses: Avada Kedavra, Cruciatus, Imperius",
+      "Hogwarts houses: Gryffindor, Hufflepuff, Ravenclaw, Slytherin",
+      "Magical creatures, potions, and ancient artifacts shape the world",
+      "The Ministry of Magic enforces wizarding law"
+    ]
+  },
+  "locations": [
+    {
+      "id": "loc_001",
+      "name": "The Three Broomsticks",
+      "type": "starting_location",
+      "description": "A warm, bustling pub in Hogsmeade. Rosmerta keeps Butterbeer flowing and gossip swirling. Witches and wizards from all walks of life pass through here. The fireplace crackles with Floo powder residue.",
+      "connected_to": ["loc_002", "loc_003"],
+      "atmosphere": "warm, lively, full of whispered secrets",
+      "npcs": ["npc_001", "npc_002"],
+      "secrets": ["A hidden passage beneath the cellar connects to the Shrieking Shack"]
+    },
+    {
+      "id": "loc_002",
+      "name": "Hogwarts Castle",
+      "type": "major_location",
+      "description": "The legendary school of witchcraft and wizardry perches atop a Scottish loch. Its corridors shift, portraits whisper, and ghosts drift through walls. Ancient magic permeates every stone.",
+      "connected_to": ["loc_001", "loc_004", "loc_005"],
+      "atmosphere": "majestic, mysterious, alive with magic",
+      "npcs": ["npc_003", "npc_004"],
+      "secrets": ["A new Chamber has been discovered beneath the Room of Requirement"]
+    },
+    {
+      "id": "loc_003",
+      "name": "Knockturn Alley",
+      "type": "dark_district",
+      "description": "A gloomy, cobblestoned alley branching off Diagon Alley. Dark artifacts line the windows of dusty shops. Suspicious figures lurk in doorways. Borgin and Burkes deals in the cursed and the forbidden.",
+      "connected_to": ["loc_001", "loc_006"],
+      "atmosphere": "sinister, shadowy, dangerous",
+      "npcs": ["npc_005", "npc_006"],
+      "secrets": ["A coven of rogue Death Eaters meets in the basement of Borgin and Burkes"]
+    },
+    {
+      "id": "loc_004",
+      "name": "The Forbidden Forest",
+      "type": "wilderness",
+      "description": "Ancient and vast, the forest bordering Hogwarts is home to centaurs, thestrals, acromantulas, and darker things. Moonlight barely penetrates the canopy. Something old and malevolent has awoken in the deepest part.",
+      "connected_to": ["loc_002", "loc_007"],
+      "atmosphere": "dark, primordial, full of ancient magic",
+      "npcs": ["npc_007"],
+      "secrets": ["The oldest tree in the forest conceals the entrance to a forgotten Death Eater vault"]
+    },
+    {
+      "id": "loc_005",
+      "name": "Ministry of Magic",
+      "type": "government",
+      "description": "Hidden beneath London, the Ministry is a vast bureaucratic labyrinth of gleaming floors and swooping memos. The new Minister is struggling to hold things together as dark incidents multiply.",
+      "connected_to": ["loc_002", "loc_003"],
+      "atmosphere": "tense, political, paranoid",
+      "npcs": ["npc_008", "npc_009"],
+      "secrets": ["The Department of Mysteries holds a new prophecy that no one has dared retrieve"]
+    },
+    {
+      "id": "loc_006",
+      "name": "Azkaban",
+      "type": "dungeon",
+      "description": "The wizarding prison on a remote island. The Dementors are gone, replaced by enchanted wards — but something has been breaking them from the inside. Prisoners have been disappearing from their cells.",
+      "connected_to": ["loc_005"],
+      "atmosphere": "cold, despairing, deeply unsettling",
+      "npcs": ["npc_010"],
+      "secrets": ["A powerful dark wizard has been communing with something ancient through the cell walls"]
+    },
+    {
+      "id": "loc_007",
+      "name": "The Lost Village of Godric's Hollow",
+      "type": "haunted_location",
+      "description": "A quiet village with a tragic magical history. Something has been disturbing the war memorial and the graves of the fallen. Dark magic residue saturates the air.",
+      "connected_to": ["loc_004"],
+      "atmosphere": "melancholic, haunted, historically heavy",
+      "npcs": [],
+      "secrets": ["A Horcrux fragment — thought destroyed — has been felt resonating beneath the Potter house ruins"]
+    }
+  ],
+  "npcs": [
+    {
+      "id": "npc_001",
+      "name": "Madam Rosmerta",
+      "role": "Pub Owner",
+      "location": "loc_001",
+      "attitude": "friendly",
+      "description": "The warm and sharp-eyed owner of the Three Broomsticks. She misses nothing and forgets nothing. Keeps Butterbeer and secrets in equal measure.",
+      "knows": ["Local gossip", "Strange travelers passing through", "Old smuggling routes"],
+      "quest_giver": true
+    },
+    {
+      "id": "npc_002",
+      "name": "Neville Longbottom",
+      "role": "Herbology Professor & Ally",
+      "location": "loc_001",
+      "attitude": "friendly",
+      "description": "The Herbology professor at Hogwarts, taking a rare evening off. Brave, warm, and quietly powerful. He senses something is very wrong and needs a trusted hand.",
+      "knows": ["Hogwarts secrets", "Rare magical plants", "Suspected Death Eater activity"],
+      "quest_giver": true
+    },
+    {
+      "id": "npc_003",
+      "name": "Headmistress Minerva McGonagall",
+      "role": "Hogwarts Headmistress",
+      "location": "loc_002",
+      "attitude": "stern_but_fair",
+      "description": "Sharp as ever, with a permanent air of authority. She's deeply concerned about events on school grounds and will trust you — if you prove worthy.",
+      "knows": ["The new Chamber discovery", "Ministry secrets", "Ancient protective spells"],
+      "quest_giver": true
+    },
+    {
+      "id": "npc_004",
+      "name": "The Sorting Hat (Animated)",
+      "role": "Ancient Oracle",
+      "location": "loc_002",
+      "attitude": "cryptic",
+      "description": "Resting on its shelf in the Headmistress's office, the Sorting Hat speaks in riddles and verse when addressed. It holds memory of every student ever sorted — and darker things.",
+      "knows": ["Founders' secrets", "Hidden rooms", "Prophecies woven into Hogwarts itself"],
+      "quest_giver": false
+    },
+    {
+      "id": "npc_005",
+      "name": "Caractacus Burke Jr.",
+      "role": "Dark Artifact Dealer",
+      "location": "loc_003",
+      "attitude": "suspicious",
+      "description": "The cunning heir to Borgin and Burkes. He trades information as readily as cursed objects. Knows everything that passes through Knockturn Alley — for the right price.",
+      "knows": ["Dark artifact black market", "Death Eater connections", "Location of lost Horcrux fragments"],
+      "quest_giver": false
+    },
+    {
+      "id": "npc_006",
+      "name": "Fenrir Greyback's Daughter",
+      "role": "Werewolf Clan Leader",
+      "location": "loc_003",
+      "attitude": "hostile",
+      "description": "Vyla Greyback inherited her father's savagery and added her own cunning. She leads a clan of werewolves who have aligned with the new dark power — for now.",
+      "knows": ["Werewolf network", "Location of a dark gathering", "Weakness of the old wards"],
+      "quest_giver": false
+    },
+    {
+      "id": "npc_007",
+      "name": "Firenze the Centaur",
+      "role": "Divination Seer",
+      "location": "loc_004",
+      "attitude": "neutral",
+      "description": "The exiled centaur reads the stars with alien clarity. He speaks truth in star-charts and rarely meddles in human affairs — but this darkness troubles even the heavens.",
+      "knows": ["Celestial prophecy", "Ancient forest magic", "Location of the vault"],
+      "quest_giver": false
+    },
+    {
+      "id": "npc_008",
+      "name": "Minister Kingsley Shacklebolt",
+      "role": "Minister for Magic",
+      "location": "loc_005",
+      "attitude": "cautiously_friendly",
+      "description": "Still commanding and principled, but visibly strained. Dark incidents are mounting and he can't trust his own department. He needs someone who works outside official channels.",
+      "knows": ["Ministry intelligence", "Azkaban breaches", "The new prophecy"],
+      "quest_giver": true
+    },
+    {
+      "id": "npc_009",
+      "name": "Unspeakable Cordelia Vane",
+      "role": "Department of Mysteries Agent",
+      "location": "loc_005",
+      "attitude": "cryptic",
+      "description": "Works in the Department of Mysteries and speaks almost entirely in classified euphemisms. She reached out to you through an anonymous owl. The prophecy concerns you directly.",
+      "knows": ["The new prophecy", "Time-room anomalies", "Something returned that shouldn't have"],
+      "quest_giver": true
+    },
+    {
+      "id": "npc_010",
+      "name": "The Whispering Prisoner",
+      "role": "Boss Enemy / Dark Wizard",
+      "location": "loc_006",
+      "attitude": "hostile",
+      "description": "Known only as the Hollow Mage — a powerful dark wizard who survived Azkaban by feeding on the residual dark magic in the walls. He's been orchestrating everything from his cell.",
+      "knows": ["How to create a new Dark Lord ritual", "Location of remaining Horcrux fragments", "Ancient dark magic lost since Voldemort"],
+      "quest_giver": false
+    }
+  ],
+  "factions": [
+    {
+      "id": "faction_001",
+      "name": "The Ministry of Magic",
+      "alignment": "lawful_neutral",
+      "description": "The official wizarding government. Slow, bureaucratic, but ultimately on the side of good. Currently struggling.",
+      "player_reputation": 0
+    },
+    {
+      "id": "faction_002",
+      "name": "The New Order of the Phoenix",
+      "alignment": "lawful_good",
+      "description": "Informal network of dark-wizard fighters reformed after Voldemort's defeat. Neville Longbottom is a key member.",
+      "player_reputation": 10
+    },
+    {
+      "id": "faction_003",
+      "name": "The Hollow Circle",
+      "alignment": "chaotic_evil",
+      "description": "The new dark faction — Death Eater remnants, rogue werewolves, and the Hollow Mage's followers. Rising fast.",
+      "player_reputation": -100
+    },
+    {
+      "id": "faction_004",
+      "name": "The Centaur Herd",
+      "alignment": "true_neutral",
+      "description": "The centaurs of the Forbidden Forest. They know more than they tell. Can become allies if approached with respect.",
+      "player_reputation": 0
+    }
+  ],
+  "items": [
+    {
+      "id": "item_001",
+      "name": "The Hollow Prophecy",
+      "type": "artifact",
+      "description": "A glowing orb from the Department of Mysteries. When held, it whispers a prophecy about the player and the Hollow Mage's endgame.",
+      "location": "loc_005",
+      "magical": true
+    },
+    {
+      "id": "item_002",
+      "name": "Resonating Horcrux Fragment",
+      "type": "key_item",
+      "description": "A dark, pulsing shard of torn soul-magic. No one knows whose soul. Radiates malice. Must be destroyed.",
+      "location": "loc_007",
+      "magical": true
+    },
+    {
+      "id": "item_003",
+      "name": "Polyjuice Flask",
+      "type": "consumable",
+      "description": "A vial of completed Polyjuice Potion. One hour of transformation. Stolen from Hogwarts' restricted stores.",
+      "location": "loc_003",
+      "magical": true
+    }
+  ],
+  "spells": [
+    { "name": "Expelliarmus", "type": "defensive", "effect": "Disarms opponent", "difficulty": "easy" },
+    { "name": "Stupefy", "type": "offensive", "effect": "Stuns target", "difficulty": "easy" },
+    { "name": "Protego", "type": "shield", "effect": "Creates magical barrier", "difficulty": "easy" },
+    { "name": "Expecto Patronum", "type": "defensive", "effect": "Repels Dementors and dark entities", "difficulty": "hard" },
+    { "name": "Accio", "type": "utility", "effect": "Summons objects", "difficulty": "easy" },
+    { "name": "Lumos", "type": "utility", "effect": "Creates light from wand tip", "difficulty": "easy" },
+    { "name": "Alohomora", "type": "utility", "effect": "Unlocks doors and locks", "difficulty": "easy" },
+    { "name": "Crucio", "type": "dark", "effect": "Inflicts intense pain — Unforgivable", "difficulty": "forbidden" },
+    { "name": "Avada Kedavra", "type": "dark", "effect": "Killing curse — Unforgivable", "difficulty": "forbidden" },
+    { "name": "Sectumsempra", "type": "offensive", "effect": "Slashes target with invisible blade", "difficulty": "advanced" },
+    { "name": "Legilimens", "type": "mental", "effect": "Read another's thoughts", "difficulty": "advanced" },
+    { "name": "Occlumens", "type": "mental", "effect": "Shield mind from intrusion", "difficulty": "advanced" },
+    { "name": "Fiendfyre", "type": "dark", "effect": "Cursed, sentient fire that destroys Horcruxes", "difficulty": "extremely_dangerous" },
+    { "name": "Episkey", "type": "healing", "effect": "Heals minor injuries", "difficulty": "easy" }
+  ],
+  "lore_entries": [
+    {
+      "id": "lore_001",
+      "title": "The Aftermath of Voldemort",
+      "content": "It has been fifteen years since the Battle of Hogwarts. Harry Potter, now Head of Magical Law Enforcement, has a family. The wizarding world rebuilt — but old wounds never truly heal. Pockets of dark magic linger in forgotten places, and those who served Voldemort were never all accounted for."
+    },
+    {
+      "id": "lore_002",
+      "title": "The Hollow Mage",
+      "content": "A dark wizard of unknown origin who appeared three years after Voldemort's defeat. He teaches a different kind of dark magic — one that hollows the soul rather than destroying it. He was captured but never truly stopped. From Azkaban, he has been weaving a plan that spans years."
+    },
+    {
+      "id": "lore_003",
+      "title": "Horcrux Fragments",
+      "content": "Most believed all of Voldemort's Horcruxes destroyed. But dark magic of that magnitude leaves echoes. Soul-fragments — splinters too small to fully anchor a soul — have been found resonating in places of great tragedy. The Hollow Mage knows how to use them."
+    },
+    {
+      "id": "lore_004",
+      "title": "The New Prophecy",
+      "content": "A new prophecy manifested in the Department of Mysteries — the first in fifteen years. The Unspeakables refuse to reveal its content, but it concerns someone operating outside Ministry channels. Someone the Hollow Mage seems to already know about."
+    },
+    {
+      "id": "lore_005",
+      "title": "Wand Lore",
+      "content": "The Elder Wand was buried with Dumbledore. But wandlore is complex — its allegiance may have passed before it was laid to rest. Some believe a wand as powerful as the Elder Wand cannot truly die. Its power echoes in all wands made from related elder wood."
+    }
+  ]
+}
