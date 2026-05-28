@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Dungeon Master — The Wizarding World RPG</title>
+  <meta name="description" content="An AI-powered Harry Potter text RPG. Narrated by LLM, with adaptive enemies, knowledge graphs, and scene generation." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- LOADING SCREEN -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="loading-screen" class="loading-screen">
+  <div class="loading-content">
+    <div class="loading-seal">
+      <div class="seal-ring"></div>
+      <div class="seal-ring ring-2"></div>
+      <div class="seal-inner">⚡</div>
+    </div>
+    <h1 class="loading-title">AI Dungeon Master</h1>
+    <p class="loading-subtitle">The Wizarding World</p>
+    <div class="loading-bar-container">
+      <div class="loading-bar" id="loading-bar"></div>
+    </div>
+    <p class="loading-text" id="loading-text">Summoning the magic...</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- CHARACTER CREATION MODAL -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="char-creation-modal" class="modal-overlay hidden">
+  <div class="modal-box char-creation">
+    <div class="modal-rune-border"></div>
+    <h2 class="modal-title">⚡ Begin Your Journey</h2>
+    <p class="modal-subtitle">The Sorting Hat awaits...</p>
+
+    <div class="form-group">
+      <label class="form-label" for="player-name-input">Your Name</label>
+      <input type="text" id="player-name-input" class="form-input" placeholder="Enter your wizard name..." maxlength="30" />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Choose Your House</label>
+      <div class="house-grid">
+        <button class="house-btn" id="house-gryffindor" data-house="Gryffindor">
+          <span class="house-icon">🦁</span>
+          <span class="house-name">Gryffindor</span>
+          <span class="house-trait">Courage</span>
+        </button>
+        <button class="house-btn" id="house-hufflepuff" data-house="Hufflepuff">
+          <span class="house-icon">🦡</span>
+          <span class="house-name">Hufflepuff</span>
+          <span class="house-trait">Loyalty</span>
+        </button>
+        <button class="house-btn" id="house-ravenclaw" data-house="Ravenclaw">
+          <span class="house-icon">🦅</span>
+          <span class="house-name">Ravenclaw</span>
+          <span class="house-trait">Wisdom</span>
+        </button>
+        <button class="house-btn" id="house-slytherin" data-house="Slytherin">
+          <span class="house-icon">🐍</span>
+          <span class="house-name">Slytherin</span>
+          <span class="house-trait">Ambition</span>
+        </button>
+      </div>
+    </div>
+
+    <button class="btn-primary begin-btn" id="begin-adventure-btn" disabled>
+      <span class="btn-icon">🪄</span>
+      Begin Adventure
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SPELL CAST OVERLAY -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="spell-overlay" class="spell-overlay hidden">
+  <div class="spell-name" id="spell-overlay-name"></div>
+  <div class="spell-particles" id="spell-particles"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- MAIN GAME UI -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="game-container" class="game-container hidden">
+
+  <!-- TOP BAR -->
+  <header class="top-bar">
+    <div class="top-bar-left">
+      <div class="game-logo">
+        <span class="logo-bolt">⚡</span>
+        <span class="logo-text">AI Dungeon Master</span>
+      </div>
+      <div class="location-badge" id="location-badge">
+        <span class="location-icon">📍</span>
+        <span id="location-name">The Three Broomsticks</span>
+      </div>
+    </div>
+    <div class="top-bar-center">
+      <div class="quest-ticker" id="quest-ticker">
+        <span class="quest-ticker-icon">📜</span>
+        <span id="quest-ticker-text">Active Quest: Whispers at the Three Broomsticks</span>
+      </div>
+    </div>
+    <div class="top-bar-right">
+      <div class="turn-counter">
+        <span class="turn-icon">🎲</span>
+        <span>Turn <span id="turn-count">1</span></span>
+      </div>
+      <button class="icon-btn" id="settings-btn" title="Settings">⚙️</button>
+      <button class="icon-btn" id="help-btn" title="Help">❓</button>
+    </div>
+  </header>
+
+  <!-- MAIN GRID -->
+  <main class="main-grid">
+
+    <!-- LEFT SIDEBAR: PLAYER STATS -->
+    <aside class="sidebar sidebar-left">
+      <div class="panel player-panel">
+        <div class="panel-header">
+          <span class="panel-icon">🧙</span>
+          <h3 class="panel-title" id="player-name-display">Wizard</h3>
+        </div>
+
+        <!-- House Badge -->
+        <div class="house-badge" id="house-badge">
+          <span id="house-badge-icon">⚡</span>
+          <span id="house-badge-name">Unselected</span>
+        </div>
+
+        <!-- Level & XP -->
+        <div class="stat-row">
+          <span class="stat-label">Level</span>
+          <span class="stat-value" id="player-level">1</span>
+        </div>
+        <div class="xp-bar-container">
+          <div class="xp-bar" id="xp-bar" style="width: 0%"></div>
+          <span class="xp-text" id="xp-text">0 / 300 XP</span>
+        </div>
+
+        <!-- HP -->
+        <div class="vitals-group">
+          <div class="vital">
+            <div class="vital-label">
+              <span>❤️ HP</span>
+              <span id="hp-numbers">100/100</span>
+            </div>
+            <div class="vital-bar-bg">
+              <div class="vital-bar hp-bar" id="hp-bar" style="width: 100%"></div>
+            </div>
+          </div>
+          <!-- Mana -->
+          <div class="vital">
+            <div class="vital-label">
+              <span>🔮 Mana</span>
+              <span id="mana-numbers">80/80</span>
+            </div>
+            <div class="vital-bar-bg">
+              <div class="vital-bar mana-bar" id="mana-bar" style="width: 100%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Galleons -->
+        <div class="stat-row galleons-row">
+          <span class="stat-label">💰 Galleons</span>
+          <span class="stat-value gold-value" id="galleon-count">50</span>
+        </div>
+
+        <!-- Status Effects -->
+        <div class="status-effects" id="status-effects">
+          <!-- Filled dynamically -->
+        </div>
+      </div>
+
+      <!-- INVENTORY -->
+      <div class="panel inventory-panel">
+        <div class="panel-header">
+          <span class="panel-icon">🎒</span>
+          <h3 class="panel-title">Inventory</h3>
+          <span class="panel-count" id="inventory-count">0/12</span>
+        </div>
+        <div class="inventory-grid" id="inventory-grid">
+          <div class="inventory-empty">Your bag is empty...</div>
+        </div>
+      </div>
+
+      <!-- SPELLBOOK -->
+      <div class="panel spell-panel">
+        <div class="panel-header">
+          <span class="panel-icon">📖</span>
+          <h3 class="panel-title">Spellbook</h3>
+        </div>
+        <div class="spell-list" id="spell-list">
+          <!-- Filled dynamically -->
+        </div>
+      </div>
+
+      <!-- REPUTATION -->
+      <div class="panel rep-panel">
+        <div class="panel-header">
+          <span class="panel-icon">⚖️</span>
+          <h3 class="panel-title">Reputation</h3>
+        </div>
+        <div id="reputation-list" class="reputation-list">
+          <!-- Filled dynamically -->
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER: SCENE + NARRATIVE + INPUT -->
+    <section class="center-panel">
+
+      <!-- SCENE IMAGE PANEL -->
+      <div class="scene-panel" id="scene-panel">
+        <div class="scene-image-container" id="scene-image-container">
+          <canvas class="scene-canvas" id="scene-canvas"></canvas>
+          <div class="scene-overlay">
+            <div class="scene-location-tag" id="scene-location-tag">The Three Broomsticks</div>
+            <div class="scene-atmosphere-tag" id="scene-atmosphere-tag">✨ Warm</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NARRATIVE PANEL -->
+      <div class="narrative-panel" id="narrative-panel">
+        <div class="narrative-scroll" id="narrative-scroll">
+          <!-- Narrative entries added here -->
+        </div>
+
+        <!-- TYPING INDICATOR -->
+        <div class="typing-indicator hidden" id="typing-indicator">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <span class="typing-text">The Dungeon Master is writing...</span>
+        </div>
+      </div>
+
+      <!-- SUGGESTED ACTIONS (Quick buttons) -->
+      <div class="suggestions-bar" id="suggestions-bar">
+        <!-- Quick action buttons filled dynamically -->
+      </div>
+
+      <!-- PLAYER INPUT -->
+      <div class="input-panel">
+        <div class="input-wrapper">
+          <div class="wand-icon">🪄</div>
+          <textarea
+            id="player-input"
+            class="player-input"
+            placeholder="What do you do? (Press Enter to submit, Shift+Enter for new line)"
+            rows="2"
+            maxlength="500"
+          ></textarea>
+          <button class="send-btn" id="send-btn" title="Submit Action">
+            <span class="send-icon">⚡</span>
+          </button>
+        </div>
+        <div class="input-meta">
+          <span class="char-count" id="char-count">0/500</span>
+          <div class="input-hints">
+            <span class="hint-tag">Try: "examine the room"</span>
+            <span class="hint-tag">Try: "cast Lumos"</span>
+            <span class="hint-tag">Try: "talk to Neville"</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT SIDEBAR: QUESTS + KNOWLEDGE GRAPH -->
+    <aside class="sidebar sidebar-right">
+
+      <!-- QUEST LOG -->
+      <div class="panel quest-panel">
+        <div class="panel-header">
+          <span class="panel-icon">📜</span>
+          <h3 class="panel-title">Quest Log</h3>
+          <button class="panel-toggle" id="quest-toggle">−</button>
+        </div>
+        <div class="quest-list" id="quest-list">
+          <!-- Filled dynamically -->
+        </div>
+      </div>
+
+      <!-- EMOTION TRACKER -->
+      <div class="panel emotion-panel">
+        <div class="panel-header">
+          <span class="panel-icon">🎭</span>
+          <h3 class="panel-title">Player Mood</h3>
+        </div>
+        <div class="emotion-display" id="emotion-display">
+          <div class="emotion-icon" id="emotion-icon">😐</div>
+          <div class="emotion-info">
+            <div class="emotion-name" id="emotion-name">Neutral</div>
+            <div class="emotion-bar-container">
+              <div class="emotion-bar" id="emotion-bar" style="width: 50%"></div>
+            </div>
+            <div class="emotion-adjustment" id="emotion-adjustment">Difficulty: Normal</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KNOWLEDGE GRAPH -->
+      <div class="panel graph-panel">
+        <div class="panel-header">
+          <span class="panel-icon">🕸️</span>
+          <h3 class="panel-title">World Map</h3>
+          <button class="panel-toggle" id="graph-toggle">−</button>
+        </div>
+        <div class="graph-container" id="graph-container">
+          <svg id="world-graph-svg" width="100%" height="280"></svg>
+          <div class="graph-legend">
+            <span class="legend-item"><span class="legend-dot" style="background:#4A90D9"></span>Location</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#7ED321"></span>NPC</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#F5A623"></span>Quest</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#FFD700"></span>You</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMBAT PANEL (shown during combat) -->
+      <div class="panel combat-panel hidden" id="combat-panel">
+        <div class="panel-header combat-header">
+          <span class="panel-icon">⚔️</span>
+          <h3 class="panel-title">Combat</h3>
+          <div class="combat-round-badge" id="combat-round">Round 1</div>
+        </div>
+        <div class="combat-content" id="combat-content">
+          <!-- Filled dynamically -->
+        </div>
+        <div class="combat-actions" id="combat-actions">
+          <!-- Combat action buttons -->
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- BOTTOM BAR -->
+  <footer class="bottom-bar">
+    <div class="bottom-left">
+      <span class="footer-text">⚡ AI Dungeon Master v1.0 — Harry Potter Universe</span>
+    </div>
+    <div class="bottom-center">
+      <div class="model-badge" id="model-badge">
+        <span class="model-dot"></span>
+        <span id="model-name">Connecting to Ollama...</span>
+      </div>
+    </div>
+    <div class="bottom-right">
+      <button class="footer-btn" id="save-btn">💾 Save</button>
+      <button class="footer-btn" id="history-btn">📚 History</button>
+      <button class="footer-btn danger" id="quit-btn">✖ Quit</button>
+    </div>
+  </footer>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- COMBAT FULL SCREEN OVERLAY -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="combat-overlay" class="combat-overlay hidden">
+  <div class="combat-arena">
+    <div class="combat-header-full">
+      <h2 class="combat-title">⚔️ Duel!</h2>
+      <div class="combat-round-indicator" id="combat-round-indicator">Round 1</div>
+    </div>
+
+    <div class="combatants">
+      <!-- Enemy -->
+      <div class="combatant enemy-side">
+        <div class="combatant-art" id="enemy-art">🧙‍♂️</div>
+        <div class="combatant-name" id="enemy-name">Death Eater</div>
+        <div class="combatant-hp-bar-bg">
+          <div class="combatant-hp-bar enemy-hp" id="enemy-hp-bar" style="width:100%"></div>
+        </div>
+        <div class="combatant-hp-text" id="enemy-hp-text">120/120</div>
+        <div class="enemy-action-bubble" id="enemy-action-bubble"></div>
+      </div>
+
+      <!-- VS -->
+      <div class="combat-vs">⚡ VS ⚡</div>
+
+      <!-- Player -->
+      <div class="combatant player-side">
+        <div class="combatant-art">🧙</div>
+        <div class="combatant-name" id="combat-player-name">You</div>
+        <div class="combatant-hp-bar-bg">
+          <div class="combatant-hp-bar player-hp" id="combat-player-hp-bar" style="width:100%"></div>
+        </div>
+        <div class="combatant-hp-text" id="combat-player-hp-text">100/100</div>
+      </div>
+    </div>
+
+    <!-- Combat Log -->
+    <div class="combat-log" id="combat-log">
+      <p class="combat-log-entry">Combat begins! Choose your spell wisely...</p>
+    </div>
+
+    <!-- Spell Selection -->
+    <div class="spell-selection" id="spell-selection">
+      <h4 class="spell-select-label">Choose Spell:</h4>
+      <div class="spell-buttons" id="spell-buttons">
+        <!-- Filled dynamically -->
+      </div>
+      <div class="combat-options">
+        <button class="combat-btn defend-btn" id="defend-btn">🛡️ Protego</button>
+        <button class="combat-btn flee-btn" id="flee-btn">🏃 Flee</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="emotion.js"></script>
+<script src="knowledge_graph.js"></script>
+<script src="combat.js"></script>
+<script src="narrator.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

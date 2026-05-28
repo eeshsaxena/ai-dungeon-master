@@ -1,0 +1,79 @@
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.pyo
+*.pyc
+.Python
+env/
+venv/
+ENV/
+.venv/
+pip-wheel-metadata/
+
+# ── Environment & Secrets ───────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.secret
+secrets/
+
+# ── IDE & Editor ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Logs & Runtime ──────────────────────────────────────────────────────────
+*.log
+logs/
+*.sqlite
+*.db
+
+# ── Model Weights & Large Files ─────────────────────────────────────────────
+# Stable Diffusion / LoRA weights (too large for GitHub)
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+models/weights/
+models/lora/
+
+# ── Vector DB & Embeddings ──────────────────────────────────────────────────
+chroma_db/
+faiss_index/
+*.index
+embeddings_cache/
+
+# ── Jupyter ─────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Testing ─────────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+desktop.ini
+
+# ── Node (if frontend tooling added) ────────────────────────────────────────
+node_modules/
+npm-debug.log*
+
+# ── Temp & scratch ──────────────────────────────────────────────────────────
+tmp/
+temp/
+scratch/

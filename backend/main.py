@@ -1,0 +1,396 @@
+"""
+FastAPI main application for AI Dungeon Master.
+Endpoints: narrate, combat, world-state, emotion, image generation, session management.
+"""
+import os
+import sys
+import uuid
+import time
+import json
+from typing import Dict, Optional, List
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Add backend dir to path
+sys.path.insert(0, str(Path(__file__).parent))
+
+from models.schemas import (
+    NarrateRequest, NarrateResponse,
+    CombatRequest, CombatResponse,
+    EmotionRequest, EmotionResponse,
+    WorldStateResponse, SessionState,
+    PlayerStats, Enemy, EnemyArchetype,
+    DifficultyLevel, EmotionState
+)
+from narrator import narrator
+from knowledge_graph import world_graph
+from combat_ai import enemy_ai
+from emotion import emotion_classifier
+from memory import memory_manager
+from image_gen import generate_scene_image, build_scene_prompt
+
+# ── App Setup ──────────────────────────────────────────────────────────────────
+
+app = FastAPI(
+    title="AI Dungeon Master API",
+    description="Harry Potter RPG powered by LLM + Knowledge Graph + RL",
+    version="1.0.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Serve frontend static files
+FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+if FRONTEND_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+
+# ── Session Storage ────────────────────────────────────────────────────────────
+
+sessions: Dict[str, SessionState] = {}
+
+
+def get_or_create_session(session_id: str) -> SessionState:
+    if session_id not in sessions:
+        sessions[session_id] = SessionState(
+            session_id=session_id,
+            player=PlayerStats(),
+        )
+    return sessions[session_id]
+
+
+# ── Routes ─────────────────────────────────────────────────────────────────────
+
+@app.get("/")
+async def root():
+    """Serve the game frontend."""
+    index_path = FRONTEND_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path))
+    return {"message": "AI Dungeon Master API", "status": "running", "version": "1.0.0"}
+
+
+@app.get("/api/health")
+async def health():
+    """Health check."""
+    return {
+        "status": "healthy",
+        "llm_provider": os.getenv("LLM_PROVIDER", "ollama"),
+        "image_provider": os.getenv("IMAGE_PROVIDER", "placeholder"),
+        "active_sessions": len(sessions),
+        "timestamp": time.time()
+    }
+
+
+@app.post("/api/session/create")
+async def create_session(player_name: str = "Unnamed Witch/Wizard", house: str = "Unselected"):
+    """Create a new game session."""
+    session_id = str(uuid.uuid4())
+    player = PlayerStats(name=player_name, house=house)
+    sessions[session_id] = SessionState(session_id=session_id, player=player)
+    memory = memory_manager.get_or_create(session_id)
+
+    # Log session start
+    intro_event = f"New adventure begins. Player: {player_name}, House: {house}"
+    memory.add_key_beat(intro_event)
+
+    return {
+        "session_id": session_id,
+        "player": player.model_dump(),
+        "message": f"⚡ Welcome to Hogwarts, {player_name}!"
+    }
+
+
+@app.get("/api/session/{session_id}")
+async def get_session(session_id: str):
+    """Get current session state."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session.model_dump()
+
+
+@app.post("/api/narrate")
+async def narrate(request: NarrateRequest) -> NarrateResponse:
+    """
+    Main narrative endpoint.
+    Takes player input → returns LLM narrative response.
+    """
+    session = get_or_create_session(request.session_id)
+    memory = memory_manager.get_or_create(request.session_id)
+
+    # Add player input to memory
+    memory.add_turn("user", request.player_input)
+
+    # Get world context
+    world_context = world_graph.get_location_context(request.current_location)
+    world_summary = world_graph.get_world_summary()
+    full_context = f"{world_context}\n\n{world_summary}"
+
+    # Detect player emotion from recent inputs
+    recent_inputs = [
+        t["content"] for t in memory.full_history[-5:]
+        if t["role"] == "user"
+    ]
+    emotion, confidence, hint = emotion_classifier.classify(recent_inputs)
+
+    # Get narrative from LLM
+    response = await narrator.narrate(
+        request=request,
+        story_history=memory.get_messages_for_llm(),
+        world_context=full_context,
+        emotion=emotion
+    )
+
+    # Add response to memory
+    memory.add_turn("assistant", response.narrative)
+
+    # Apply world state updates
+    updates = response.world_state_updates
+    if "new_location" in updates:
+        world_graph.update_player_location(updates["new_location"])
+        session.player.current_location = updates["new_location"]
+        memory.add_world_change(f"Player moved to {updates['new_location']}")
+
+    # Update session
+    session.player.turns_played += 1
+    session.player.emotion_state = emotion
+    session.story_history.append({"role": "user", "content": request.player_input})
+    session.story_history.append({"role": "assistant", "content": response.narrative})
+
+    # Add hint if triggered
+    if hint:
+        response.narrative += f"\n\n{hint}"
+
+    response.detected_emotion = emotion
+    response.difficulty_adjustment = emotion_classifier.get_difficulty_recommendation(emotion).value
+
+    return response
+
+
+@app.post("/api/combat")
+async def resolve_combat(request: CombatRequest) -> CombatResponse:
+    """Resolve a combat round using the enemy AI."""
+    session = get_or_create_session(request.session_id)
+
+    result = enemy_ai.resolve_combat_round(request)
+
+    # Update session player HP
+    session.player.hp = result.player_hp_remaining
+
+    if result.combat_over:
+        if result.player_won:
+            session.player.xp += result.xp_gained
+            memory = memory_manager.get_or_create(request.session_id)
+            memory.add_key_beat(f"Defeated {request.enemy.name}! Gained {result.xp_gained} XP")
+        else:
+            # Player lost combat — reduce HP to 10 (no permadeath in Phase 1)
+            session.player.hp = 10
+            memory = memory_manager.get_or_create(request.session_id)
+            memory.add_key_beat(f"Defeated by {request.enemy.name}. Barely escaped.")
+
+    return result
+
+
+@app.post("/api/spawn-enemy")
+async def spawn_enemy(archetype: str = "Death Eater", level_scaling: float = 1.0):
+    """Spawn an enemy for combat."""
+    try:
+        arch = EnemyArchetype(archetype)
+    except ValueError:
+        arch = EnemyArchetype.DARK_WIZARD
+
+    enemy = enemy_ai.spawn_enemy(arch, level_scaling)
+    return enemy.model_dump()
+
+
+@app.post("/api/classify-emotion")
+async def classify_emotion(request: EmotionRequest) -> EmotionResponse:
+    """Classify player emotional state."""
+    emotion, confidence, hint = emotion_classifier.classify(
+        request.recent_inputs,
+        request.turns_without_progress,
+        request.time_between_inputs_seconds
+    )
+
+    difficulty = emotion_classifier.get_difficulty_recommendation(emotion)
+
+    return EmotionResponse(
+        emotion=emotion,
+        confidence=confidence,
+        difficulty_recommendation=difficulty,
+        hint_triggered=hint is not None,
+        hint_text=hint
+    )
+
+
+@app.get("/api/world-state")
+async def get_world_state(session_id: Optional[str] = None) -> dict:
+    """Export world graph for D3.js visualization."""
+    session = sessions.get(session_id) if session_id else None
+    player_location = session.player.current_location if session else "loc_001"
+
+    d3_data = world_graph.to_d3_json(player_location)
+    active_quests = world_graph.get_active_quests()
+    available_quests = world_graph.get_available_quests()
+
+    return {
+        **d3_data,
+        "player_location": player_location,
+        "active_quests": active_quests,
+        "available_quests": available_quests
+    }
+
+
+@app.get("/api/location/{location_id}")
+async def get_location(location_id: str):
+    """Get information about a specific location."""
+    info = world_graph.get_location_info(location_id)
+    if not info:
+        raise HTTPException(status_code=404, detail="Location not found")
+    npcs = world_graph.get_npcs_at_location(location_id)
+    return {"location": info, "npcs": npcs}
+
+
+@app.post("/api/generate-scene")
+async def generate_scene(
+    location_id: str = "loc_001",
+    situation: str = "",
+    mood: str = "mysterious"
+):
+    """Generate a scene image for the current location."""
+    prompt = build_scene_prompt(location_id, situation, mood)
+    result = await generate_scene_image(prompt, location_id)
+    return result
+
+
+@app.get("/api/world-lore")
+async def get_world_lore():
+    """Get world lore entries."""
+    lore_path = Path(__file__).parent / "data" / "world_lore.json"
+    with open(lore_path) as f:
+        return json.load(f)
+
+
+@app.get("/api/quests")
+async def get_quests():
+    """Get all quests."""
+    quests_path = Path(__file__).parent / "data" / "quests.json"
+    with open(quests_path) as f:
+        return json.load(f)
+
+
+@app.put("/api/session/{session_id}/player")
+async def update_player(session_id: str, player: PlayerStats):
+    """Update player stats in a session."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    session.player = player
+    return {"updated": True, "player": player.model_dump()}
+
+
+@app.delete("/api/session/{session_id}")
+async def delete_session(session_id: str):
+    """Delete a session (quit game)."""
+    if session_id in sessions:
+        del sessions[session_id]
+    memory_manager.clear(session_id)
+    return {"deleted": True}
+
+
+# ── WebSocket for real-time streaming ─────────────────────────────────────────
+
+class ConnectionManager:
+    def __init__(self):
+        self.active: Dict[str, WebSocket] = {}
+
+    async def connect(self, session_id: str, ws: WebSocket):
+        await ws.accept()
+        self.active[session_id] = ws
+
+    def disconnect(self, session_id: str):
+        self.active.pop(session_id, None)
+
+    async def send(self, session_id: str, data: dict):
+        ws = self.active.get(session_id)
+        if ws:
+            await ws.send_json(data)
+
+
+ws_manager = ConnectionManager()
+
+
+@app.websocket("/ws/{session_id}")
+async def websocket_endpoint(websocket: WebSocket, session_id: str):
+    """WebSocket for real-time narrative streaming."""
+    await ws_manager.connect(session_id, websocket)
+    try:
+        while True:
+            data = await websocket.receive_json()
+            event_type = data.get("type", "")
+
+            if event_type == "ping":
+                await ws_manager.send(session_id, {"type": "pong"})
+
+            elif event_type == "narrate":
+                # Build request from WebSocket data
+                try:
+                    session = get_or_create_session(session_id)
+                    req = NarrateRequest(
+                        session_id=session_id,
+                        player_input=data.get("input", ""),
+                        player_stats=session.player,
+                        current_location=session.player.current_location,
+                        difficulty=DifficultyLevel(data.get("difficulty", "medium"))
+                    )
+                    # Send typing indicator
+                    await ws_manager.send(session_id, {"type": "typing", "data": True})
+                    # Get narrative
+                    response = await narrate(req)
+                    await ws_manager.send(session_id, {
+                        "type": "narrative",
+                        "data": response.model_dump()
+                    })
+                except Exception as e:
+                    await ws_manager.send(session_id, {"type": "error", "message": str(e)})
+
+    except WebSocketDisconnect:
+        ws_manager.disconnect(session_id)
+
+
+# ── Startup ────────────────────────────────────────────────────────────────────
+
+@app.on_event("startup")
+async def startup():
+    print("AI Dungeon Master starting...")
+    print(f"   LLM Provider: {os.getenv('LLM_PROVIDER', 'ollama')}")
+    print(f"   Ollama Model: {os.getenv('OLLAMA_MODEL', 'llama3.2')}")
+    print(f"   Image Provider: {os.getenv('IMAGE_PROVIDER', 'placeholder')}")
+    print(f"   World: The Wizarding World (Harry Potter)")
+    print(f"   Frontend: {FRONTEND_DIR}")
+    print("   Ready!")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host=os.getenv("APP_HOST", "0.0.0.0"),
+        port=int(os.getenv("APP_PORT", "8000")),
+        reload=os.getenv("DEBUG", "true").lower() == "true"
+    )

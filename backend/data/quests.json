@@ -1,0 +1,123 @@
+{
+  "quests": [
+    {
+      "id": "quest_001",
+      "title": "Whispers at the Three Broomsticks",
+      "type": "main",
+      "status": "active",
+      "giver": "npc_002",
+      "description": "Professor Longbottom pulls you aside at the Three Broomsticks. Strange magical disturbances have been reported near Hogwarts — plants in the greenhouses dying overnight, wards flickering. Someone or something is probing the castle's defenses.",
+      "objectives": [
+        { "id": "obj_001_01", "text": "Speak with Professor Longbottom", "completed": false },
+        { "id": "obj_001_02", "text": "Investigate the greenhouse disturbances", "completed": false },
+        { "id": "obj_001_03", "text": "Report findings to McGonagall", "completed": false }
+      ],
+      "rewards": { "xp": 300, "galleons": 50, "items": [], "reputation": { "faction_002": 15 } },
+      "connected_quests": ["quest_002"],
+      "difficulty": "easy",
+      "house_points": { "Gryffindor": 10, "Hufflepuff": 10, "Ravenclaw": 10, "Slytherin": 10 }
+    },
+    {
+      "id": "quest_002",
+      "title": "The New Chamber",
+      "type": "main",
+      "status": "locked",
+      "giver": "npc_003",
+      "description": "McGonagall reveals that a second chamber has been discovered beneath the Room of Requirement. Ancient runes seal it shut. Someone is trying to open it from the outside — using dark magic that predates even Salazar Slytherin.",
+      "objectives": [
+        { "id": "obj_002_01", "text": "Enter the Room of Requirement", "completed": false },
+        { "id": "obj_002_02", "text": "Locate the hidden chamber entrance", "completed": false },
+        { "id": "obj_002_03", "text": "Decipher the ancient runes", "completed": false },
+        { "id": "obj_002_04", "text": "Prevent the chamber from being opened", "completed": false }
+      ],
+      "rewards": { "xp": 800, "galleons": 200, "items": ["item_003"], "reputation": { "faction_002": 30 } },
+      "connected_quests": ["quest_003"],
+      "difficulty": "medium",
+      "house_points": { "Gryffindor": 50, "Hufflepuff": 50, "Ravenclaw": 50, "Slytherin": 50 }
+    },
+    {
+      "id": "quest_003",
+      "title": "The Hollow Prophecy",
+      "type": "main",
+      "status": "locked",
+      "giver": "npc_009",
+      "description": "An anonymous owl leads you to Unspeakable Vane in the Department of Mysteries. A new prophecy has formed — and it involves you. The Hollow Mage already knows your name. You must retrieve the prophecy before his agents do.",
+      "objectives": [
+        { "id": "obj_003_01", "text": "Find the Unspeakable's contact point", "completed": false },
+        { "id": "obj_003_02", "text": "Enter the Department of Mysteries", "completed": false },
+        { "id": "obj_003_03", "text": "Navigate the Hall of Prophecy", "completed": false },
+        { "id": "obj_003_04", "text": "Retrieve your prophecy", "completed": false },
+        { "id": "obj_003_05", "text": "Escape the Hollow Circle's ambush", "completed": false }
+      ],
+      "rewards": { "xp": 2000, "galleons": 500, "items": ["item_001"], "reputation": { "faction_001": 40, "faction_002": 40 } },
+      "connected_quests": ["quest_004"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "quest_004",
+      "title": "Azkaban's Secret",
+      "type": "main",
+      "status": "locked",
+      "giver": "npc_008",
+      "description": "Prisoners are vanishing from Azkaban. Minister Shacklebolt needs someone off the official record to investigate. The Hollow Mage is at the center of this — and he wants to be found.",
+      "objectives": [
+        { "id": "obj_004_01", "text": "Reach Azkaban by secret Portkey", "completed": false },
+        { "id": "obj_004_02", "text": "Investigate the missing prisoners", "completed": false },
+        { "id": "obj_004_03", "text": "Confront the Hollow Mage", "completed": false },
+        { "id": "obj_004_04", "text": "Survive his trap and escape", "completed": false }
+      ],
+      "rewards": { "xp": 5000, "galleons": 1000, "items": [], "reputation": { "faction_001": 75, "faction_002": 50 } },
+      "connected_quests": ["quest_005"],
+      "difficulty": "very_hard"
+    },
+    {
+      "id": "quest_005",
+      "title": "Fragments of a Dead Soul",
+      "type": "main",
+      "status": "locked",
+      "giver": "npc_009",
+      "description": "The Hollow Mage's plan is revealed: use the Horcrux fragments scattered across Britain to anchor a new dark entity — a soul-construct of pure malice. You must destroy every fragment before the ritual is complete.",
+      "objectives": [
+        { "id": "obj_005_01", "text": "Locate all Horcrux fragments (0/4)", "completed": false },
+        { "id": "obj_005_02", "text": "Acquire Fiendfyre or Basilisk Venom for destruction", "completed": false },
+        { "id": "obj_005_03", "text": "Destroy all fragments", "completed": false },
+        { "id": "obj_005_04", "text": "Confront and defeat the Hollow Mage", "completed": false }
+      ],
+      "rewards": { "xp": 10000, "galleons": 5000, "items": ["legendary_wand"], "reputation": { "faction_001": 100, "faction_002": 100 } },
+      "connected_quests": [],
+      "difficulty": "legendary"
+    },
+    {
+      "id": "quest_side_001",
+      "title": "Butterbeer and Bad Omens",
+      "type": "side",
+      "status": "available",
+      "giver": "npc_001",
+      "description": "Rosmerta has been serving a mysterious cloaked figure every Thursday night. Last Thursday, the figure left behind a small package — which is now hissing.",
+      "objectives": [
+        { "id": "obj_s01_01", "text": "Examine the mysterious package", "completed": false },
+        { "id": "obj_s01_02", "text": "Trace the cloaked figure", "completed": false },
+        { "id": "obj_s01_03", "text": "Report your findings", "completed": false }
+      ],
+      "rewards": { "xp": 150, "galleons": 30, "items": [], "reputation": { "faction_002": 10 } },
+      "connected_quests": ["quest_003"],
+      "difficulty": "easy"
+    },
+    {
+      "id": "quest_side_002",
+      "title": "The Stars Don't Lie",
+      "type": "side",
+      "status": "available",
+      "giver": "npc_007",
+      "description": "Firenze sends a message via the forest birds: the stars show a great darkness converging on Hogwarts within a lunar cycle. He will share what he knows — if you come to him in the Forbidden Forest and prove you understand that some things are worth more than safety.",
+      "objectives": [
+        { "id": "obj_s02_01", "text": "Enter the Forbidden Forest at night", "completed": false },
+        { "id": "obj_s02_02", "text": "Find Firenze's clearing", "completed": false },
+        { "id": "obj_s02_03", "text": "Hear the centaur's prophecy reading", "completed": false }
+      ],
+      "rewards": { "xp": 200, "galleons": 0, "items": [], "reputation": { "faction_004": 50 } },
+      "connected_quests": ["quest_002"],
+      "difficulty": "medium"
+    }
+  ]
+}
