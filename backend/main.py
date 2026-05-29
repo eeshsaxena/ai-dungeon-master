@@ -38,6 +38,8 @@ from emotion import emotion_classifier
 from memory import memory_manager
 from image_gen import generate_scene_image, build_scene_prompt
 from rag import lore_retriever
+from rl_agent import rl_agent
+from rl_train import simulate as rl_simulate
 
 # ── App Setup ──────────────────────────────────────────────────────────────────
 
@@ -211,6 +213,39 @@ async def resolve_combat(request: CombatRequest) -> CombatResponse:
             memory.add_key_beat(f"Defeated by {request.enemy.name}. Barely escaped.")
 
     return result
+
+
+@app.get("/api/rl-stats")
+async def rl_stats(archetype: Optional[str] = None):
+    """Inspect what the RL enemy agent has learned."""
+    payload = {"stats": rl_agent.stats()}
+    if archetype:
+        payload["policy"] = rl_agent.policy_for(archetype)
+    return payload
+
+
+@app.post("/api/rl-simulate")
+async def rl_simulate_endpoint(
+    archetype: str = "Death Eater",
+    player_style: str = "aggressive",
+    train_combats: int = 400,
+    eval_combats: int = 300,
+    train_live: bool = False,
+):
+    """
+    Run self-play to demonstrate the enemy agent learning a player's style.
+    Returns baseline (rule) vs learned win rates and the learning curve.
+    Set train_live=true to train the persistent live agent on this style.
+    """
+    train_combats = max(20, min(train_combats, 5000))
+    eval_combats = max(20, min(eval_combats, 2000))
+    return rl_simulate(
+        archetype=archetype,
+        train_combats=train_combats,
+        eval_combats=eval_combats,
+        player_style=player_style,
+        use_global=train_live,
+    )
 
 
 @app.post("/api/spawn-enemy")
@@ -410,6 +445,9 @@ async def startup():
         print(f"   RAG: {stats['passages']} passages via {stats['backend']} ({stats['model']})")
     except Exception as e:
         print(f"   RAG: failed to initialize ({e})")
+    rls = rl_agent.stats()
+    print(f"   RL Enemy AI: {'on' if os.getenv('ENEMY_AI', 'rl').lower() == 'rl' else 'off'} "
+          f"| {rls['episodes']} episodes, {rls['total_states']} states learned")
     print("   Ready!")
 
 
