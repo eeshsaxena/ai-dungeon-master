@@ -110,6 +110,7 @@ ai-dungeon-master/
 │   ├── emotion.py          # Player emotion classifier
 │   ├── memory.py           # Story memory management
 │   ├── rag.py              # RAG retriever — semantic lore search
+│   ├── npc_memory.py       # Long-term per-NPC memory (Phase 2.5)
 │   ├── image_gen.py        # Scene image generation hook
 │   ├── models/schemas.py   # Pydantic data models
 │   └── data/
@@ -152,9 +153,13 @@ ai-dungeon-master/
 - **Measurable** — self-play shows learned win rate jumping from ~0% (rule baseline) to ~100% vs a hard aggressive player
 - **`/api/rl-stats`** + **`/api/rl-simulate`** — inspect the learned policy and run a before/after demonstration
 
-### 📅 Phase 2.5 (Next)
-- Long-term NPC memory
-- Persistent vector DB (Chroma/FAISS) for cross-session recall
+### ✅ Phase 2.5 (Current)
+- **Long-term NPC memory** — each NPC remembers what the player did in their presence, persisted across sessions
+- **Semantic recall** — NPCs surface their most relevant memories of you (shared embeddings), with a recency fallback offline
+- **`/api/npc-memory`** — inspect or query any NPC's memory of the player
+
+### 📅 Next
+- Persistent vector DB (Chroma/FAISS) for larger-scale cross-session recall
 
 ### 📅 Phase 3
 - Stable Diffusion scene images
@@ -192,6 +197,7 @@ ai-dungeon-master/
 | POST | `/api/combat` | Resolve combat round (RL enemy agent learns) |
 | GET | `/api/world-state` | Get D3.js graph data |
 | GET | `/api/lore-search` | Semantic search over the lore corpus (RAG) |
+| GET | `/api/npc-memory` | Inspect/query long-term NPC memory of the player |
 | GET | `/api/rl-stats` | Inspect the enemy agent's learned policy |
 | POST | `/api/rl-simulate` | Self-play demo: rule baseline vs learned win rate |
 | POST | `/api/classify-emotion` | Detect player emotion |

@@ -40,6 +40,7 @@ from image_gen import generate_scene_image, build_scene_prompt
 from rag import lore_retriever
 from rl_agent import rl_agent
 from rl_train import simulate as rl_simulate
+from npc_memory import npc_memory_store
 
 # ── App Setup ──────────────────────────────────────────────────────────────────
 
@@ -157,6 +158,16 @@ async def narrate(request: NarrateRequest) -> NarrateResponse:
     if lore_context:
         full_context = f"{full_context}\n\n{lore_context}"
 
+    # NPC memory: surface what NPCs present here remember about the player
+    npcs_here = world_graph.get_npcs_at_location(request.current_location)
+    npc_recall = [
+        block for npc in npcs_here
+        if (block := npc_memory_store.recall_text(
+            npc["id"], npc.get("label", npc["id"]), request.player_input, top_k=2))
+    ]
+    if npc_recall:
+        full_context += "\n\n[NPC MEMORY — these characters recall the player]\n" + "\n".join(npc_recall)
+
     # Get narrative from LLM
     response = await narrator.narrate(
         request=request,
@@ -167,6 +178,12 @@ async def narrate(request: NarrateRequest) -> NarrateResponse:
 
     # Add response to memory
     memory.add_turn("assistant", response.narrative)
+
+    # NPC long-term memory: NPCs present here remember what the player just did
+    for npc in npcs_here:
+        npc_memory_store.record(
+            npc["id"], f"The player {request.player_input}", request.session_id
+        )
 
     # Apply world state updates
     updates = response.world_state_updates
@@ -339,6 +356,20 @@ async def lore_search(q: str, top_k: int = 4):
         "query": q,
         "results": results,
         "retriever": lore_retriever.stats(),
+    }
+
+
+@app.get("/api/npc-memory")
+async def npc_memory(npc_id: Optional[str] = None, q: str = "", top_k: int = 3):
+    """Inspect long-term NPC memory. With npc_id, recall that NPC's memories
+    (semantically if a query is given); without it, return store stats."""
+    if not npc_id:
+        return npc_memory_store.stats()
+    top_k = max(1, min(top_k, 10))
+    return {
+        "npc_id": npc_id,
+        "query": q,
+        "memories": npc_memory_store.recall(npc_id, q, top_k=top_k),
     }
 
 
