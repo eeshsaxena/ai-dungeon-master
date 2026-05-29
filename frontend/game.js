@@ -509,6 +509,41 @@ function renderScene(locationId, atmosphere) {
     ancient: '🏛️ Ancient', magical: '✨ Magical', cold: '❄️ Cold', melancholic: '🌧️ Melancholic'
   };
   if (atmosphereTag) atmosphereTag.textContent = atmosphereIcons[atmosphere] || '✨ Magical';
+
+  // Layer the richer backend-generated scene art over the canvas fallback
+  loadSceneImage(locationId, atmosphere);
+}
+
+// Backend scene art is fetched once per location and cached, so the periodic
+// canvas animation loop never re-hits the API.
+const sceneImageCache = {};
+let sceneImageToken = 0;
+
+function loadSceneImage(locationId, mood) {
+  const imgEl = document.getElementById('scene-image');
+  if (!imgEl || !GameState.backendConnected || typeof Narrator === 'undefined') return;
+
+  const token = ++sceneImageToken;
+  const apply = (dataUrl) => {
+    if (token !== sceneImageToken) return;  // a newer scene took over
+    imgEl.src = dataUrl;
+    imgEl.classList.add('loaded');
+  };
+
+  if (sceneImageCache[locationId]) {
+    apply(sceneImageCache[locationId]);
+    return;
+  }
+
+  imgEl.classList.remove('loaded');  // hide stale art while the new location loads
+  Narrator.generateScene(locationId, '', mood)
+    .then((res) => {
+      if (res && res.image_base64) {
+        sceneImageCache[locationId] = res.image_base64;
+        apply(res.image_base64);
+      }
+    })
+    .catch(() => {});  // keep the canvas fallback on failure
 }
 
 function drawSceneAtmosphere(ctx, W, H, palette, locationId) {

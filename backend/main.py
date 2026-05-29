@@ -333,7 +333,7 @@ async def generate_scene(
 ):
     """Generate a scene image for the current location."""
     prompt = build_scene_prompt(location_id, situation, mood)
-    result = await generate_scene_image(prompt, location_id)
+    result = await generate_scene_image(prompt, location_id, mood=mood)
     return result
 
 
