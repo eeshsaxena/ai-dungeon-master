@@ -1,12 +1,26 @@
 """
 Enemy AI for AI Dungeon Master.
-Rule-based combat AI scaffold — designed to be upgraded to RL (PPO/DQN) in Phase 4.
-Each enemy archetype has distinct behavioral patterns, spells, and adaptation logic.
+
+Phase 4: the decision core is a tabular Q-learning agent (see rl_agent.py) that
+adapts to the player's fighting style. The rule-based personality logic is kept
+as a warm-start prior for states the agent has not yet encountered, and as a
+fallback when RL is disabled (ENEMY_AI=rule).
 """
+import os
 import random
 import json
 from typing import Dict, List, Optional, Tuple
 from models.schemas import CombatAction, EnemyArchetype, Enemy, CombatRequest, CombatResponse
+from rl_agent import rl_agent, encode_state, ACTION_EFFECTS, ACTIONS
+
+USE_RL = os.getenv("ENEMY_AI", "rl").lower() == "rl"
+
+# Map the strategic action string used by the RL agent to a CombatAction enum.
+ACTION_TO_ENUM = {
+    "attack": CombatAction.ATTACK,
+    "defend": CombatAction.DEFEND,
+    "special": CombatAction.SPECIAL,
+}
 
 
 # ── Enemy Definitions ──────────────────────────────────────────────────────────
@@ -118,6 +132,7 @@ class BehaviorTracker:
         self.rounds_survived: int = 0
         self.consecutive_attacks: int = 0
         self.defensive_turns: int = 0
+        self.last_player_action: Optional[str] = None
 
     def record_player_action(self, action: str, spell: Optional[str] = None):
         self.player_action_counts[action] = self.player_action_counts.get(action, 0) + 1
@@ -129,6 +144,7 @@ class BehaviorTracker:
         elif action == "defend":
             self.defensive_turns += 1
             self.consecutive_attacks = 0
+        self.last_player_action = action
         self.rounds_survived += 1
 
     def get_player_tendency(self) -> str:
@@ -167,138 +183,130 @@ class EnemyAI:
         round_number: int,
         player_hp_ratio: float,
         enemy_hp_ratio: float
-    ) -> Tuple[CombatAction, Optional[str], int, str]:
+    ) -> Tuple[CombatAction, Optional[str], str, str, str]:
         """
-        Select enemy action based on personality, HP ratios, and player patterns.
-        Returns: (action, spell_name, damage, narrative_fragment)
+        Decide the enemy's strategic action for this round.
+        Returns: (combat_action, spell, narrative, state_key, action_str)
 
-        Phase 4 Hook: Replace this method with RL policy network inference.
-        State vector: [enemy_hp_ratio, player_hp_ratio, round_number,
-                       player_tendency_encoded, consecutive_attacks, ...]
+        The rule-based personality logic supplies a prior; the RL agent makes
+        the final choice (and learns from the outcome in resolve_combat_round).
         """
         template = ENEMY_TEMPLATES.get(enemy.archetype, ENEMY_TEMPLATES[EnemyArchetype.DARK_WIZARD])
         spells = template["spells"]
+
+        prior = self._rule_based_strategy(
+            enemy, tracker, round_number, player_hp_ratio, enemy_hp_ratio
+        )
+
+        state = encode_state(
+            enemy_hp_ratio, player_hp_ratio,
+            tracker.get_player_tendency(), tracker.last_player_action,
+        )
+
+        action_str = rl_agent.select_action(enemy.archetype.value, state, prior) if USE_RL else prior
+
+        combat_action = ACTION_TO_ENUM.get(action_str, CombatAction.ATTACK)
+        spell = None if action_str == "defend" else random.choice(spells)
+        narrative = self._narrate_action(enemy, action_str, state)
+        return combat_action, spell, narrative, state, action_str
+
+    def _rule_based_strategy(
+        self, enemy: Enemy, tracker: BehaviorTracker,
+        round_number: int, player_hp_ratio: float, enemy_hp_ratio: float
+    ) -> str:
+        """Personality-driven heuristic, collapsed to one of ACTIONS. Used as
+        the RL warm-start prior and as the policy when ENEMY_AI=rule."""
         personality = enemy.personality
-
-        # ── Decision Logic by Personality ─────────────────────────────────
-        action = CombatAction.ATTACK
-        chosen_spell = random.choice(spells)
-        damage_multiplier = 1.0
-        narrative = ""
-
-        player_tendency = tracker.get_player_tendency()
+        tendency = tracker.get_player_tendency()
 
         if personality == "aggressive":
-            # Always attack, use special when low on HP
-            if enemy_hp_ratio < 0.3:
-                action = CombatAction.SPECIAL
-                chosen_spell = spells[-1]  # Last spell is usually special
-                damage_multiplier = 1.8
-                narrative = f"Cornered and desperate, the {enemy.name} unleashes its most powerful ability!"
-            else:
-                action = CombatAction.ATTACK
-                damage_multiplier = 1.0 + (0.1 * tracker.consecutive_attacks)
-                narrative = f"The {enemy.name} lunges forward with savage intensity!"
-
-        elif personality == "cunning":
-            # Adapt to player behavior
-            if player_tendency == "aggressive" and round_number > 2:
-                # Counter the player's aggression
-                action = CombatAction.DEFEND
-                damage_multiplier = 0.0
-                chosen_spell = None
-                narrative = f"The {enemy.name} smirks, anticipating your predictable attack..."
-            elif tracker.defensive_turns > 2:
-                # Break through defenses
-                action = CombatAction.SPECIAL
-                damage_multiplier = 2.0
-                narrative = f"The {enemy.name} sees through your defensive strategy and strikes hard!"
-            else:
-                action = CombatAction.ATTACK
-                damage_multiplier = 1.3
-                narrative = f"The {enemy.name} chooses their moment carefully and strikes with precision."
-
-        elif personality == "defensive":
+            return "special" if enemy_hp_ratio < 0.3 else "attack"
+        if personality == "cunning":
+            if tendency == "aggressive" and round_number > 2:
+                return "defend"   # bait the predictable attacker
+            if tracker.defensive_turns > 2:
+                return "special"  # punish turtling
+            return "attack"
+        if personality == "defensive":
             if player_hp_ratio < 0.4:
-                # Press the advantage
-                action = CombatAction.ATTACK
-                damage_multiplier = 1.5
-                narrative = f"Sensing your weakness, the {enemy.name} presses the attack!"
-            elif enemy_hp_ratio < 0.5:
-                # Heal or defend
-                action = CombatAction.DEFEND
-                damage_multiplier = 0.0
-                chosen_spell = None
-                narrative = f"The {enemy.name} falls back, gathering strength..."
-            else:
-                action = CombatAction.ATTACK
-                damage_multiplier = 0.8
-                narrative = f"The {enemy.name} probes your defenses with a measured strike."
+                return "attack"   # press the advantage
+            if enemy_hp_ratio < 0.5:
+                return "defend"
+            return "attack"
+        if personality == "erratic":
+            return random.choice(ACTIONS)
+        return "attack"
 
-        elif personality == "erratic":
-            # Random with occasional outbursts
-            roll = random.random()
-            if roll < 0.15:
-                action = CombatAction.FLEE
-                narrative = f"The {enemy.name} suddenly bolts — then wheels around!"
-            elif roll < 0.30:
-                action = CombatAction.TAUNT
-                narrative = f"The {enemy.name} shrieks and postures wildly!"
-                damage_multiplier = 0.0
-                chosen_spell = None
-            elif roll < 0.50:
-                action = CombatAction.SPECIAL
-                damage_multiplier = 2.0
-                narrative = f"Without warning, the {enemy.name} erupts with chaotic magical energy!"
-            else:
-                action = CombatAction.ATTACK
-                damage_multiplier = random.uniform(0.5, 2.0)
-                narrative = f"The {enemy.name} attacks unpredictably!"
-
-        # Calculate damage
-        base_damage = enemy.attack
-        damage = int(base_damage * damage_multiplier * random.uniform(0.8, 1.2))
-
-        return action, chosen_spell, damage, narrative
+    def _narrate_action(self, enemy: Enemy, action_str: str, state: str) -> str:
+        """Flavor text for the chosen action; hints when the agent is acting on
+        learned experience rather than the default prior."""
+        name = enemy.name
+        learned = USE_RL and not rl_agent._is_unseen(enemy.archetype.value, state)
+        if action_str == "special":
+            tail = " — it has seen this fight before" if learned else ""
+            return f"The {name} channels its full power into a devastating strike{tail}!"
+        if action_str == "defend":
+            tail = ", reading your rhythm" if learned else ""
+            return f"The {name} guards{tail}, deflecting the brunt of your assault."
+        return f"The {name} presses the attack!"
 
     def resolve_combat_round(self, request: CombatRequest) -> CombatResponse:
-        """Resolve a full combat round."""
+        """Resolve a full combat round and let the RL agent learn from it."""
         tracker = self.get_tracker(request.session_id)
         tracker.record_player_action(request.player_action, request.player_spell)
 
         enemy = request.enemy
         player = request.player_stats
 
-        player_hp_ratio = player.hp / player.max_hp
-        enemy_hp_ratio = enemy.hp / enemy.max_hp
+        player_hp_ratio = player.hp / max(player.max_hp, 1)
+        enemy_hp_ratio = enemy.hp / max(enemy.max_hp, 1)
 
-        # Enemy selects action
-        action, spell, enemy_damage, narrative = self.select_action(
+        # Enemy chooses its strategic action (RL policy or rule prior)
+        action, spell, narrative, state, action_str = self.select_action(
             enemy, tracker, request.round_number, player_hp_ratio, enemy_hp_ratio
         )
+        effects = ACTION_EFFECTS.get(action_str, ACTION_EFFECTS["attack"])
 
-        # Player's attack resolves
+        # Enemy's outgoing damage (0 when defending)
+        enemy_damage = int(enemy.attack * effects["out_mult"] * random.uniform(0.85, 1.15))
+
+        # Player's outgoing damage, mitigated when the enemy guards
         player_damage = self._resolve_player_attack(
             request.player_action, request.player_spell, enemy, action
         )
+        player_damage = int(player_damage * effects["incoming_mult"])
 
-        # Apply defense
-        if action == CombatAction.DEFEND:
-            enemy_damage = 0
-
-        # Apply weakness
+        # Weakness exploit
         template = ENEMY_TEMPLATES.get(enemy.archetype, {})
         weakness = template.get("weakness", "")
-        if request.player_spell and weakness.lower() in request.player_spell.lower():
+        if request.player_spell and weakness and weakness.lower() in request.player_spell.lower():
             player_damage = int(player_damage * 2.5)
             narrative += f"\n*{enemy.name} recoils — that's their weakness!*"
 
-        # Calculate new HP values
+        # Resolve HP
         new_enemy_hp = max(0, enemy.hp - player_damage)
         new_player_hp = max(0, player.hp - enemy_damage)
 
         combat_over = new_enemy_hp <= 0 or new_player_hp <= 0
-        player_won = new_enemy_hp <= 0 if combat_over else None
+        player_won = (new_enemy_hp <= 0) if combat_over else None
+        enemy_won = new_player_hp <= 0
+
+        # ── RL: reward + Q-update (from the enemy's perspective) ───────────
+        if USE_RL:
+            reward = (enemy_damage / max(player.max_hp, 1)) - (player_damage / max(enemy.max_hp, 1))
+            if combat_over:
+                reward += 1.0 if enemy_won else -1.0
+            next_state = encode_state(
+                new_enemy_hp / max(enemy.max_hp, 1),
+                new_player_hp / max(player.max_hp, 1),
+                tracker.get_player_tendency(),
+                request.player_action,
+            )
+            rl_agent.learn(
+                enemy.archetype.value, state, action_str, reward, next_state, combat_over
+            )
+            if combat_over:
+                rl_agent.end_episode(enemy_won)
 
         loot = []
         xp_gained = 0

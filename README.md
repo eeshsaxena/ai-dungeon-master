@@ -82,8 +82,8 @@ Player Input (Text)
 | Enemy AI | Rule-based (RL scaffold) | ✅ Phase 1 |
 | Scene Images | HTML5 Canvas + SD hook | ✅ Phase 1 |
 | RAG Pipeline | sentence-transformers + cosine | ✅ Phase 2 |
+| RL Enemy Agent | Tabular Q-learning (adaptive) | ✅ Phase 4 |
 | Fine-tuned LLM | LoRA on HP corpus | 📅 Phase 6 |
-| RL Enemy Agent | PPO/DQN | 📅 Phase 4 |
 | Stable Diffusion | Scene images | 📅 Phase 3 |
 
 ---
@@ -104,7 +104,9 @@ ai-dungeon-master/
 │   ├── main.py             # API server entry point
 │   ├── narrator.py         # Ollama/OpenAI narrator agent
 │   ├── knowledge_graph.py  # NetworkX world graph
-│   ├── combat_ai.py        # Enemy AI (RL-ready scaffold)
+│   ├── combat_ai.py        # Combat resolution (drives the RL agent)
+│   ├── rl_agent.py         # Q-learning enemy agent (adaptive)
+│   ├── rl_train.py         # Self-play harness / learning demo
 │   ├── emotion.py          # Player emotion classifier
 │   ├── memory.py           # Story memory management
 │   ├── rag.py              # RAG retriever — semantic lore search
@@ -142,6 +144,14 @@ ai-dungeon-master/
 - **Graceful fallback** — degrades to keyword retrieval if the embedding model is unavailable (offline)
 - **`/api/lore-search`** — query the corpus semantically over HTTP
 
+### ✅ Phase 4 (Current)
+- **Adaptive enemy AI** — tabular Q-learning agent that learns how each player fights and counters it
+- **Real tradeoffs** — `attack` / `special` (more damage out, more taken) / `defend` (no damage out, much less taken); the optimal choice is state-dependent
+- **Warm start** — unseen states fall back to the rule-based personality prior, so enemies fight sensibly from turn one, then improve
+- **Persistent learning** — per-archetype Q-tables saved to disk; enemies keep getting smarter across sessions
+- **Measurable** — self-play shows learned win rate jumping from ~0% (rule baseline) to ~100% vs a hard aggressive player
+- **`/api/rl-stats`** + **`/api/rl-simulate`** — inspect the learned policy and run a before/after demonstration
+
 ### 📅 Phase 2.5 (Next)
 - Long-term NPC memory
 - Persistent vector DB (Chroma/FAISS) for cross-session recall
@@ -149,10 +159,6 @@ ai-dungeon-master/
 ### 📅 Phase 3
 - Stable Diffusion scene images
 - Style: HP illustrated book aesthetic
-
-### 📅 Phase 4
-- PPO/DQN RL enemy agent
-- Learns player patterns over time
 
 ---
 
@@ -183,9 +189,11 @@ ai-dungeon-master/
 | GET | `/api/health` | Health check |
 | POST | `/api/session/create` | Create new game session |
 | POST | `/api/narrate` | Get narrative from LLM |
-| POST | `/api/combat` | Resolve combat round |
+| POST | `/api/combat` | Resolve combat round (RL enemy agent learns) |
 | GET | `/api/world-state` | Get D3.js graph data |
 | GET | `/api/lore-search` | Semantic search over the lore corpus (RAG) |
+| GET | `/api/rl-stats` | Inspect the enemy agent's learned policy |
+| POST | `/api/rl-simulate` | Self-play demo: rule baseline vs learned win rate |
 | POST | `/api/classify-emotion` | Detect player emotion |
 | POST | `/api/generate-scene` | Generate scene image |
 | WS | `/ws/{session_id}` | Real-time streaming |

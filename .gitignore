@@ -55,6 +55,9 @@ faiss_index/
 *.index
 embeddings_cache/
 
+# ── RL agent runtime state (learned Q-tables) ───────────────────────────────
+rl_data/
+
 # ── Jupyter ─────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 *.ipynb
