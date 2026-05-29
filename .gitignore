@@ -58,6 +58,9 @@ embeddings_cache/
 # ── RL agent runtime state (learned Q-tables) ───────────────────────────────
 rl_data/
 
+# ── NPC long-term memory store (runtime state) ──────────────────────────────
+npc_memory_store/
+
 # ── Jupyter ─────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 *.ipynb
