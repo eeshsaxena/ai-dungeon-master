@@ -80,11 +80,12 @@ Player Input (Text)
 | Knowledge Graph | NetworkX + D3.js | ✅ Phase 1 |
 | Emotion Classifier | Keyword + behavioral | ✅ Phase 1 |
 | Enemy AI | Rule-based (RL scaffold) | ✅ Phase 1 |
-| Scene Images | HTML5 Canvas + SD hook | ✅ Phase 1 |
+| Scene Images | Procedural Pillow renderer (real PNGs) | ✅ Phase 3 |
 | RAG Pipeline | sentence-transformers + cosine | ✅ Phase 2 |
+| Persistent Vectors | Disk-backed NPC embedding store | ✅ Phase 2.5 |
 | RL Enemy Agent | Tabular Q-learning (adaptive) | ✅ Phase 4 |
+| Stable Diffusion | Photoreal scene images (optional upgrade) | 📅 Phase 3+ |
 | Fine-tuned LLM | LoRA on HP corpus | 📅 Phase 6 |
-| Stable Diffusion | Scene images | 📅 Phase 3 |
 
 ---
 
@@ -156,14 +157,17 @@ ai-dungeon-master/
 ### ✅ Phase 2.5 (Current)
 - **Long-term NPC memory** — each NPC remembers what the player did in their presence, persisted across sessions
 - **Semantic recall** — NPCs surface their most relevant memories of you (shared embeddings), with a recency fallback offline
+- **Persistent vector store** — memory embeddings are cached to disk (`npc_vectors.npz`) so recall no longer recomputes every vector on startup; a per-NPC content hash rebuilds only changed NPCs, and a model-name guard invalidates the cache if the embedding model changes
 - **`/api/npc-memory`** — inspect or query any NPC's memory of the player
 
-### 📅 Next
-- Persistent vector DB (Chroma/FAISS) for larger-scale cross-session recall
+### ✅ Phase 3 (Current)
+- **Procedural scene art** — server-side Pillow renderer produces real atmospheric scene PNGs (per-location silhouettes, mood-driven particles, gradient skies) with no GPU, model, or network required; `IMAGE_PROVIDER=procedural` is the default
+- **Layered display** — the frontend fetches and caches the generated image per location and fades it in over the canvas fallback
+- **`/api/generate-scene`** — returns a base64 PNG data URL
 
-### 📅 Phase 3
-- Stable Diffusion scene images
-- Style: HP illustrated book aesthetic
+### 📅 Next
+- **Stable Diffusion upgrade** (`IMAGE_PROVIDER=stable_diffusion`) — photoreal scene art via a running AUTOMATIC1111 server; the hook already exists in `image_gen.py`
+- Larger-scale persistent vector DB (Chroma/FAISS) for cross-session recall beyond the current disk cache
 
 ---
 
