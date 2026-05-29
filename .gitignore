@@ -83,3 +83,6 @@ npm-debug.log*
 tmp/
 temp/
 scratch/
+
+# ── Claude Code local config & dev helpers ──────────────────────────────────
+.claude/
