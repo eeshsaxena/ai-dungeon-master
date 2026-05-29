@@ -81,10 +81,10 @@ Player Input (Text)
 | Emotion Classifier | Keyword + behavioral | ✅ Phase 1 |
 | Enemy AI | Rule-based (RL scaffold) | ✅ Phase 1 |
 | Scene Images | HTML5 Canvas + SD hook | ✅ Phase 1 |
+| RAG Pipeline | sentence-transformers + cosine | ✅ Phase 2 |
 | Fine-tuned LLM | LoRA on HP corpus | 📅 Phase 6 |
 | RL Enemy Agent | PPO/DQN | 📅 Phase 4 |
 | Stable Diffusion | Scene images | 📅 Phase 3 |
-| RAG Pipeline | Vector DB + embeddings | 📅 Phase 2 |
 
 ---
 
@@ -107,6 +107,7 @@ ai-dungeon-master/
 │   ├── combat_ai.py        # Enemy AI (RL-ready scaffold)
 │   ├── emotion.py          # Player emotion classifier
 │   ├── memory.py           # Story memory management
+│   ├── rag.py              # RAG retriever — semantic lore search
 │   ├── image_gen.py        # Scene image generation hook
 │   ├── models/schemas.py   # Pydantic data models
 │   └── data/
@@ -134,10 +135,16 @@ ai-dungeon-master/
 - **WebSocket streaming** — real-time narrative delivery
 - **Spell animations** — visual effects on casting
 
-### 📅 Phase 2 (Next)
-- Real RAG pipeline with vector DB
-- Semantic search over HP corpus
+### ✅ Phase 2 (Current)
+- **RAG pipeline** — every lore passage (locations, NPCs, factions, items, spells, lore entries) embedded with `sentence-transformers` (all-MiniLM-L6-v2)
+- **Semantic retrieval** — each turn pulls the most relevant canon and injects it into the narrator's context, so the DM stays lore-accurate
+- **Embedding cache** — vectors computed once and cached to disk; rebuilt automatically when the corpus changes
+- **Graceful fallback** — degrades to keyword retrieval if the embedding model is unavailable (offline)
+- **`/api/lore-search`** — query the corpus semantically over HTTP
+
+### 📅 Phase 2.5 (Next)
 - Long-term NPC memory
+- Persistent vector DB (Chroma/FAISS) for cross-session recall
 
 ### 📅 Phase 3
 - Stable Diffusion scene images
@@ -178,6 +185,7 @@ ai-dungeon-master/
 | POST | `/api/narrate` | Get narrative from LLM |
 | POST | `/api/combat` | Resolve combat round |
 | GET | `/api/world-state` | Get D3.js graph data |
+| GET | `/api/lore-search` | Semantic search over the lore corpus (RAG) |
 | POST | `/api/classify-emotion` | Detect player emotion |
 | POST | `/api/generate-scene` | Generate scene image |
 | WS | `/ws/{session_id}` | Real-time streaming |

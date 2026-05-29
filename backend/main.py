@@ -37,6 +37,7 @@ from combat_ai import enemy_ai
 from emotion import emotion_classifier
 from memory import memory_manager
 from image_gen import generate_scene_image, build_scene_prompt
+from rag import lore_retriever
 
 # ── App Setup ──────────────────────────────────────────────────────────────────
 
@@ -147,6 +148,12 @@ async def narrate(request: NarrateRequest) -> NarrateResponse:
         if t["role"] == "user"
     ]
     emotion, confidence, hint = emotion_classifier.classify(recent_inputs)
+
+    # RAG: retrieve lore passages relevant to the player's action + recent context
+    retrieval_query = " ".join(recent_inputs[-3:]) or request.player_input
+    lore_context = lore_retriever.retrieve_context(retrieval_query, top_k=4)
+    if lore_context:
+        full_context = f"{full_context}\n\n{lore_context}"
 
     # Get narrative from LLM
     response = await narrator.narrate(
@@ -286,6 +293,20 @@ async def get_world_lore():
         return json.load(f)
 
 
+@app.get("/api/lore-search")
+async def lore_search(q: str, top_k: int = 4):
+    """Semantic search over the world lore corpus (RAG retriever)."""
+    if not q or not q.strip():
+        raise HTTPException(status_code=400, detail="Query 'q' is required")
+    top_k = max(1, min(top_k, 10))
+    results = lore_retriever.search(q, top_k=top_k)
+    return {
+        "query": q,
+        "results": results,
+        "retriever": lore_retriever.stats(),
+    }
+
+
 @app.get("/api/quests")
 async def get_quests():
     """Get all quests."""
@@ -383,6 +404,12 @@ async def startup():
     print(f"   Image Provider: {os.getenv('IMAGE_PROVIDER', 'placeholder')}")
     print(f"   World: The Wizarding World (Harry Potter)")
     print(f"   Frontend: {FRONTEND_DIR}")
+    # Warm the RAG index so the first narration isn't slow
+    try:
+        stats = lore_retriever.initialize().stats()
+        print(f"   RAG: {stats['passages']} passages via {stats['backend']} ({stats['model']})")
+    except Exception as e:
+        print(f"   RAG: failed to initialize ({e})")
     print("   Ready!")
 
 
