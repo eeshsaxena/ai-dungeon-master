@@ -237,6 +237,14 @@ class LoreRetriever:
         q = self._model.encode([query], normalize_embeddings=True)[0]
         return self.vectors @ np.asarray(q, dtype=np.float32)
 
+    def embed(self, texts: List[str]) -> Optional[np.ndarray]:
+        """Shared embedding helper (normalized vectors) for other modules such
+        as NPC memory. Returns None if the model is unavailable."""
+        if not texts or not self._load_model():
+            return None
+        vecs = self._model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+        return np.asarray(vecs, dtype=np.float32)
+
     def _keyword_scores(self, query: str) -> np.ndarray:
         terms = set(re.findall(r"[a-z']+", query.lower()))
         terms = {t for t in terms if len(t) > 2}
