@@ -9,3 +9,12 @@ numpy>=1.26.0
 scikit-learn>=1.4.0
 aiofiles>=23.2.0
 python-multipart>=0.0.9
+
+# ── Stable Diffusion (IMAGE_PROVIDER=diffusers) ────────────────────────────────
+# Install PyTorch FIRST (CUDA) — pick the right CUDA version for your driver:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+# Then install these:
+diffusers>=0.27.0
+transformers>=4.40.0
+accelerate>=0.30.0
+safetensors>=0.4.3
