@@ -673,6 +673,14 @@ async def startup():
     print(f"   Save System: {ss['save_count']} saves on disk ({ss['save_dir']})")
     # Pre-warm SD pipeline in background (no-op if IMAGE_PROVIDER != "diffusers")
     warmup_diffusers()
+    # Pre-warm LoRA model in background (no-op if LLM_PROVIDER != "lora")
+    if os.getenv("LLM_PROVIDER") == "lora":
+        try:
+            from lora_train.infer import warmup_lora
+            warmup_lora()
+            print("   LoRA: loading adapter in background…")
+        except ImportError:
+            print("   LoRA: peft/transformers not installed — run: pip install peft trl bitsandbytes")
     print("   Ready!")
 
 

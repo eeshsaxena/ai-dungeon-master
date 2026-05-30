@@ -12,11 +12,11 @@ from models.schemas import (
     NarrateRequest, NarrateResponse, EmotionState, DifficultyLevel, PlayerHouse
 )
 
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
+LLM_PROVIDER    = os.getenv("LLM_PROVIDER",    "ollama")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL",    "llama3.2")
+OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY",  "")
+OPENAI_MODEL    = os.getenv("OPENAI_MODEL",    "gpt-4o")
 
 
 # ── System Prompt ──────────────────────────────────────────────────────────────
@@ -138,6 +138,8 @@ class NarratorAgent:
                 raw = await self._call_ollama(messages)
             elif self.provider == "openai":
                 raw = await self._call_openai(messages)
+            elif self.provider == "lora":
+                raw = await self._call_lora(messages)
             else:
                 raw = None
 
@@ -169,6 +171,14 @@ class NarratorAgent:
             )
             data = response.json()
             return data.get("message", {}).get("content", "")
+
+    async def _call_lora(self, messages: List[Dict]) -> Optional[str]:
+        """Call the local LoRA fine-tuned model via lora_train/infer.py."""
+        try:
+            from lora_train.infer import generate
+            return await generate(messages)
+        except ImportError:
+            return None
 
     async def _call_openai(self, messages: List[Dict]) -> Optional[str]:
         """Call OpenAI API."""

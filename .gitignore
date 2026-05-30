@@ -87,5 +87,9 @@ tmp/
 temp/
 scratch/
 
+# ── LoRA training artifacts (adapter weights + generated dataset) ────────────
+backend/lora_train/adapter/
+backend/lora_train/training_data/
+
 # ── Claude Code local config & dev helpers ──────────────────────────────────
 .claude/
