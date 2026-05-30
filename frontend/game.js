@@ -264,6 +264,7 @@ async function loadSaveFile(filename) {
     renderScene(GameState.currentLocation, 'mysterious');
 
     addNarrativeEntry('dm', `✨ *Welcome back, ${data.player.name}!* Your adventure continues where you left off...`, 'warm');
+    checkSdStatus();
     document.getElementById('player-input').focus();
   } catch (e) {
     document.getElementById('char-creation-modal').classList.remove('hidden');
@@ -318,6 +319,9 @@ async function startGame(playerName, house) {
 
   // Show opening narrative
   await showOpeningNarrative(playerName, house);
+
+  // Check if SD pipeline is warming up
+  checkSdStatus();
 
   // Focus input
   document.getElementById('player-input').focus();
@@ -639,9 +643,10 @@ function loadSceneImage(locationId, mood) {
 
   const token = ++sceneImageToken;
   const apply = (dataUrl) => {
-    if (token !== sceneImageToken) return;  // a newer scene took over
+    if (token !== sceneImageToken) return;
     imgEl.src = dataUrl;
     imgEl.classList.add('loaded');
+    setSdGenerating(false);
   };
 
   if (sceneImageCache[locationId]) {
@@ -649,15 +654,58 @@ function loadSceneImage(locationId, mood) {
     return;
   }
 
-  imgEl.classList.remove('loaded');  // hide stale art while the new location loads
+  imgEl.classList.remove('loaded');
+  setSdGenerating(true, 'Generating scene art...');
   Narrator.generateScene(locationId, '', mood)
     .then((res) => {
       if (res && res.image_base64) {
         sceneImageCache[locationId] = res.image_base64;
         apply(res.image_base64);
+      } else {
+        setSdGenerating(false);
       }
     })
-    .catch(() => {});  // keep the canvas fallback on failure
+    .catch(() => { setSdGenerating(false); });
+}
+
+function setSdGenerating(active, text = 'Generating scene art...') {
+  const overlay = document.getElementById('sd-generating-overlay');
+  const textEl  = document.getElementById('sd-generating-text');
+  if (!overlay) return;
+  if (active) {
+    if (textEl) textEl.textContent = text;
+    overlay.classList.remove('hidden');
+  } else {
+    overlay.classList.add('hidden');
+  }
+}
+
+// Poll /api/sd-status once on startup to show pipeline warmup state in model badge
+async function checkSdStatus() {
+  if (!GameState.backendConnected) return;
+  try {
+    const r = await fetch('http://localhost:8000/api/sd-status');
+    const data = await r.json();
+    if (data.provider === 'diffusers' && data.loading) {
+      setSdGenerating(true, `⚙️ Loading SD model (${(data.model || '').split('/').pop()})...`);
+      // Keep polling until ready
+      const poll = setInterval(async () => {
+        try {
+          const r2 = await fetch('http://localhost:8000/api/sd-status');
+          const d2 = await r2.json();
+          if (!d2.loading) {
+            clearInterval(poll);
+            setSdGenerating(false);
+            if (d2.ready) {
+              // Reload current scene with SD
+              delete sceneImageCache[GameState.currentLocation];
+              loadSceneImage(GameState.currentLocation, 'mysterious');
+            }
+          }
+        } catch { clearInterval(poll); setSdGenerating(false); }
+      }, 3000);
+    }
+  } catch {}
 }
 
 function drawSceneAtmosphere(ctx, W, H, palette, locationId) {

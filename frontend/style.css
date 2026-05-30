@@ -1662,3 +1662,35 @@ body {
   letter-spacing: 0.05em;
   margin-top: 2px;
 }
+
+/* ── SD generating overlay ────────────────────────────────────────────── */
+.sd-generating-overlay {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(8, 6, 15, 0.75);
+  backdrop-filter: blur(4px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.sd-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--color-gold);
+  border-radius: 50%;
+  animation: sd-spin 0.8s linear infinite;
+}
+@keyframes sd-spin {
+  to { transform: rotate(360deg); }
+}
