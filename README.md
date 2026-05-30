@@ -85,6 +85,8 @@ Player Input (Text)
 | Persistent Vectors | Disk-backed NPC embedding store | ✅ Phase 2.5 |
 | RL Enemy Agent | Tabular Q-learning (adaptive) | ✅ Phase 4 |
 | Stable Diffusion | Photoreal scene images (optional upgrade) | 📅 Phase 3+ |
+| Save / Load System | Disk-backed session persistence (JSON) | ✅ Phase 5 |
+| Level Progression | XP → Level 1-20, spell unlocks, titles | ✅ Phase 5 |
 | Fine-tuned LLM | LoRA on HP corpus | 📅 Phase 6 |
 
 ---
@@ -164,6 +166,15 @@ ai-dungeon-master/
 - **Procedural scene art** — server-side Pillow renderer produces real atmospheric scene PNGs (per-location silhouettes, mood-driven particles, gradient skies) with no GPU, model, or network required; `IMAGE_PROVIDER=procedural` is the default
 - **Layered display** — the frontend fetches and caches the generated image per location and fades it in over the canvas fallback
 - **`/api/generate-scene`** — returns a base64 PNG data URL
+
+### ✅ Phase 5 (Current)
+- **Full game persistence** — every session auto-saves every 5 turns to `backend/saves/` as JSON; manual save via the 💾 button (server-backed when online, localStorage when offline)
+- **Load saved game** — "Load Saved Game" on the character-creation screen fetches all saves from the server, shows name / level / title / turn count, and resumes a full live session
+- **Server-side progression** — authoritative XP/level system (levels 1–20); XP thresholds follow a `100·lvl^1.5` curve; spell unlocks at levels 1, 3, 5, 7, 10, 12, 15, 18, 20; wizard title advances with each tier
+- **Level-up toast** — animated full-screen overlay fires on level-up, showing the new level, title, and any newly unlocked spells; frontend is immediately updated with server-authoritative `updated_player` data
+- **Endpoints**: `POST /api/save/{session_id}`, `GET /api/saves`, `POST /api/load?filename=`, `DELETE /api/save/{filename}`
+- **`backend/progression.py`** — authoritative XP table, `process_xp_gain()`, `spells_for_level()`, `title_for_level()`
+- **`backend/save_manager.py`** — `SaveManager` class with save/load/list/delete and per-player pruning (keeps 30 most recent saves)
 
 ### 📅 Next
 - **Stable Diffusion upgrade** (`IMAGE_PROVIDER=stable_diffusion`) — photoreal scene art via a running AUTOMATIC1111 server; the hook already exists in `image_gen.py`
