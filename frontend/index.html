@@ -74,6 +74,44 @@
       <span class="btn-icon">🪄</span>
       Begin Adventure
     </button>
+
+    <div class="char-creation-divider">
+      <span>or</span>
+    </div>
+
+    <button class="btn-secondary load-btn" id="load-game-btn">
+      <span class="btn-icon">💾</span>
+      Load Saved Game
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SAVE LIST MODAL -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="save-list-modal" class="modal-overlay hidden">
+  <div class="modal-box save-list-box">
+    <div class="modal-rune-border"></div>
+    <h2 class="modal-title">💾 Saved Adventures</h2>
+    <p class="modal-subtitle">Choose a save to continue your journey</p>
+    <div class="save-list" id="save-list-items">
+      <p class="saves-empty">No saves found...</p>
+    </div>
+    <button class="btn-secondary" id="close-save-list-btn" style="margin-top:12px;width:100%">✖ Cancel</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- LEVEL-UP TOAST -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="levelup-toast" class="levelup-toast hidden">
+  <div class="levelup-inner">
+    <div class="levelup-burst">✨</div>
+    <div class="levelup-text">
+      <div class="levelup-title" id="levelup-title">Level Up!</div>
+      <div class="levelup-subtitle" id="levelup-subtitle">You reached Level 2</div>
+    </div>
+    <div class="levelup-spells" id="levelup-spells"></div>
   </div>
 </div>
 

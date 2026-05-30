@@ -41,6 +41,8 @@ from rag import lore_retriever
 from rl_agent import rl_agent
 from rl_train import simulate as rl_simulate
 from npc_memory import npc_memory_store
+from save_manager import save_manager
+from progression import process_xp_gain, xp_to_next, title_for_level, spells_for_level
 
 # ── App Setup ──────────────────────────────────────────────────────────────────
 
@@ -198,6 +200,10 @@ async def narrate(request: NarrateRequest) -> NarrateResponse:
     session.story_history.append({"role": "user", "content": request.player_input})
     session.story_history.append({"role": "assistant", "content": response.narrative})
 
+    # Auto-save every 5 turns
+    if session.player.turns_played % 5 == 0:
+        _auto_save(request.session_id, session)
+
     # Add hint if triggered
     if hint:
         response.narrative += f"\n\n{hint}"
@@ -208,28 +214,131 @@ async def narrate(request: NarrateRequest) -> NarrateResponse:
     return response
 
 
+def _auto_save(session_id: str, session) -> None:
+    """Background auto-save — never raises."""
+    try:
+        mem = memory_manager.get(session_id)
+        memory_data = mem.to_dict() if mem else {}
+        save_manager.save(session_id, session.player.model_dump(), memory_data)
+    except Exception:
+        pass
+
+
 @app.post("/api/combat")
 async def resolve_combat(request: CombatRequest) -> CombatResponse:
     """Resolve a combat round using the enemy AI."""
     session = get_or_create_session(request.session_id)
 
     result = enemy_ai.resolve_combat_round(request)
-
-    # Update session player HP
     session.player.hp = result.player_hp_remaining
 
     if result.combat_over:
+        memory = memory_manager.get_or_create(request.session_id)
         if result.player_won:
-            session.player.xp += result.xp_gained
-            memory = memory_manager.get_or_create(request.session_id)
+            # Server-authoritative XP + level-up
+            old_xp = request.player_stats.xp
+            old_level = request.player_stats.level
+            new_xp, new_level, new_spells, leveled_up = process_xp_gain(old_xp, result.xp_gained)
+
+            session.player.xp = new_xp
+            session.player.level = new_level
+            session.player.xp_to_next = xp_to_next(new_xp, new_level)
+            session.player.title = title_for_level(new_level)
+
+            if leveled_up:
+                levels_gained = new_level - old_level
+                session.player.max_hp = request.player_stats.max_hp + levels_gained * 10
+                session.player.hp = session.player.max_hp
+                session.player.max_mana = request.player_stats.max_mana + levels_gained * 5
+                session.player.mana = session.player.max_mana
+                for spell in new_spells:
+                    if spell not in session.player.spells_known:
+                        session.player.spells_known.append(spell)
+                result.level_up = True
+                result.new_level = new_level
+                result.new_title = session.player.title
+                result.new_spells = new_spells
+                result.updated_player = session.player.model_dump()
+                memory.add_key_beat(
+                    f"Leveled up to {new_level} ({session.player.title})!"
+                    + (f" Unlocked: {', '.join(new_spells)}" if new_spells else "")
+                )
+
             memory.add_key_beat(f"Defeated {request.enemy.name}! Gained {result.xp_gained} XP")
         else:
-            # Player lost combat — reduce HP to 10 (no permadeath in Phase 1)
             session.player.hp = 10
-            memory = memory_manager.get_or_create(request.session_id)
             memory.add_key_beat(f"Defeated by {request.enemy.name}. Barely escaped.")
 
     return result
+
+
+# ── Save / Load ────────────────────────────────────────────────────────────────
+
+@app.post("/api/save/{session_id}")
+async def save_game(session_id: str):
+    """Manually save the current session to disk."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    mem = memory_manager.get(session_id)
+    memory_data = mem.to_dict() if mem else {}
+    filename = save_manager.save(session_id, session.player.model_dump(), memory_data)
+    return {"saved": True, "filename": filename, "player": session.player.model_dump()}
+
+
+@app.get("/api/saves")
+async def list_saves():
+    """List all save files, newest first."""
+    return {"saves": save_manager.list_saves(), **save_manager.stats()}
+
+
+@app.post("/api/load")
+async def load_game(filename: str):
+    """
+    Load a save file and reconstitute a live session.
+    Returns a new session_id and the restored player stats.
+    """
+    data = save_manager.load(filename)
+    if not data:
+        raise HTTPException(status_code=404, detail=f"Save file '{filename}' not found")
+
+    from models.schemas import PlayerStats as PS
+    player = PS(**data["player"])
+    # Recompute progression fields in case the save predates Phase 5
+    player.xp_to_next = xp_to_next(player.xp, player.level)
+    player.title = title_for_level(player.level)
+    # Make sure all spells for current level are known
+    for spell in spells_for_level(player.level):
+        if spell not in player.spells_known:
+            player.spells_known.append(spell)
+
+    new_sid = str(uuid.uuid4())
+    sessions[new_sid] = SessionState(session_id=new_sid, player=player)
+
+    # Restore story memory key beats so the narrator has context
+    mem = memory_manager.get_or_create(new_sid)
+    saved_mem = data.get("memory", {})
+    if saved_mem.get("compressed_summary"):
+        mem.compressed_summary = saved_mem["compressed_summary"]
+    for beat in saved_mem.get("key_beats", []):
+        mem.add_key_beat(beat)
+    for change in saved_mem.get("world_changes", []):
+        mem.add_world_change(change)
+
+    return {
+        "session_id": new_sid,
+        "player": player.model_dump(),
+        "loaded_from": filename,
+    }
+
+
+@app.delete("/api/save/{filename}")
+async def delete_save(filename: str):
+    """Delete a save file."""
+    deleted = save_manager.delete(filename)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Save file not found")
+    return {"deleted": True, "filename": filename}
 
 
 @app.get("/api/rl-stats")
@@ -479,6 +588,8 @@ async def startup():
     rls = rl_agent.stats()
     print(f"   RL Enemy AI: {'on' if os.getenv('ENEMY_AI', 'rl').lower() == 'rl' else 'off'} "
           f"| {rls['episodes']} episodes, {rls['total_states']} states learned")
+    ss = save_manager.stats()
+    print(f"   Save System: {ss['save_count']} saves on disk ({ss['save_dir']})")
     print("   Ready!")
 
 

@@ -35,6 +35,8 @@ class PlayerStats(BaseModel):
     house: PlayerHouse = PlayerHouse.UNSELECTED
     level: int = 1
     xp: int = 0
+    xp_to_next: int = 300  # XP needed to reach next level
+    title: str = "First-Year"  # Wizard title for current level
     hp: int = 100
     max_hp: int = 100
     mana: int = 80
@@ -128,6 +130,12 @@ class CombatResponse(BaseModel):
     player_won: Optional[bool] = None
     loot: List[Dict[str, Any]] = Field(default_factory=list)
     xp_gained: int = 0
+    # Level-up info — populated when the player levels up this combat
+    level_up: bool = False
+    new_level: Optional[int] = None
+    new_title: Optional[str] = None
+    new_spells: List[str] = Field(default_factory=list)
+    updated_player: Optional[Dict] = None  # full updated player stats if level_up
 
 
 class EmotionRequest(BaseModel):
