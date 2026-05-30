@@ -92,6 +92,8 @@ Player Input (Text)
 | LoRA Fine-tune | QLoRA training pipeline + HP DM dataset | ✅ Phase 8 |
 | World State | Quest/location persistence across restarts | ✅ Phase 9 |
 | TTS Voice | Coqui GPU / pyttsx3 / ElevenLabs narration | ✅ Phase 9 |
+| Item System | 21 HP items, loot tables, use/drop effects | ✅ Phase 10 |
+| NPC Dialogue | Multi-turn structured NPC conversations | ✅ Phase 10 |
 
 ---
 
