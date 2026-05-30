@@ -55,6 +55,7 @@ class PlayerStats(BaseModel):
     current_location: str = "loc_001"
     emotion_state: EmotionState = EmotionState.NEUTRAL
     turns_played: int = 0
+    active_effects: List[Dict[str, Any]] = Field(default_factory=list)  # timed buffs/debuffs
 
 
 class NarrateRequest(BaseModel):

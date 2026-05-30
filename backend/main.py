@@ -47,6 +47,11 @@ from progression import process_xp_gain, xp_to_next, title_for_level, spells_for
 from quest_generator import quest_generator, QuestContext
 from world_state_store import get_world_state, drop_world_state
 from tts_engine import synthesize as tts_synthesize, tts_status, warmup_coqui
+from item_system import (
+    ITEM_DB, get_item, make_item_instance, use_item, roll_loot,
+    inventory_to_display, item_summary, tick_effects
+)
+from dialogue_engine import dialogue_engine, DialogueContext
 
 # ── App Setup ──────────────────────────────────────────────────────────────────
 
@@ -298,12 +303,180 @@ async def resolve_combat(request: CombatRequest) -> CombatResponse:
                     + (f" Unlocked: {', '.join(new_spells)}" if new_spells else "")
                 )
 
+            # Roll loot from item system
+            loot_items = roll_loot(request.enemy.archetype, session.player.level)
+            if loot_items:
+                session.player.inventory.extend(loot_items)
+                loot_names = [i["name"] for i in loot_items]
+                result.loot = loot_items
+                memory.add_key_beat(f"Found: {', '.join(loot_names)}")
+
             memory.add_key_beat(f"Defeated {request.enemy.name}! Gained {result.xp_gained} XP")
         else:
             session.player.hp = 10
             memory.add_key_beat(f"Defeated by {request.enemy.name}. Barely escaped.")
 
     return result
+
+
+# ── Inventory / Item System ────────────────────────────────────────────────────
+
+@app.get("/api/items")
+async def list_all_items():
+    """Return the full item database for the frontend."""
+    return {"items": ITEM_DB}
+
+
+@app.get("/api/inventory/{session_id}")
+async def get_inventory(session_id: str):
+    """Get the current player inventory with enriched item data."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"inventory": inventory_to_display(session.player.inventory)}
+
+
+@app.post("/api/inventory/{session_id}/use/{item_id}")
+async def use_item_endpoint(session_id: str, item_id: str):
+    """Use an item from the player's inventory. Applies effects immediately."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Find item in inventory
+    inv = session.player.inventory
+    idx = next((i for i, it in enumerate(inv) if it.get("id") == item_id), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail=f"Item '{item_id}' not in inventory")
+
+    item = inv[idx]
+    player_dict = session.player.model_dump()
+    active_effects = player_dict.get("active_effects", [])
+    mem = memory_manager.get_or_create(session_id)
+    result = use_item(item, player_dict, active_effects, mem.key_beats)
+
+    # Consume the item (remove from inventory) unless it's an artifact/key
+    if item.get("type") not in ("artifact", "key") or not item.get("effects"):
+        inv.pop(idx)
+    elif item.get("type") == "artifact":
+        # Artifacts are consumed after single use
+        inv.pop(idx)
+
+    # Apply updated stats back to session
+    from models.schemas import PlayerStats
+    updated = PlayerStats(**player_dict)
+    session.player = updated
+
+    mem.add_key_beat(f"Used {item['name']}: {result['message']}")
+    return result
+
+
+@app.post("/api/inventory/{session_id}/drop/{item_id}")
+async def drop_item_endpoint(session_id: str, item_id: str):
+    """Remove an item from inventory without using it."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    inv = session.player.inventory
+    idx = next((i for i, it in enumerate(inv) if it.get("id") == item_id), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    dropped = inv.pop(idx)
+    return {"dropped": True, "item": dropped}
+
+
+@app.post("/api/inventory/{session_id}/give")
+async def give_item_endpoint(session_id: str, item_id: str):
+    """Give the player an item (for testing / quest rewards)."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    inst = make_item_instance(item_id)
+    if not inst:
+        raise HTTPException(status_code=404, detail=f"Unknown item: {item_id}")
+    session.player.inventory.append(inst)
+    return {"given": True, "item": inst}
+
+
+# ── NPC Dialogue ───────────────────────────────────────────────────────────────
+
+def _build_dialogue_ctx(session_id: str, npc_id: str, npc_name: str) -> DialogueContext:
+    session = get_or_create_session(session_id)
+    mem     = memory_manager.get_or_create(session_id)
+    npcs_h  = world_graph.get_npcs_at_location(session.player.current_location)
+    memories = npc_memory_store.recall(npc_id, "", top_k=5)
+    mem_texts = [m.get("text", "") for m in memories if m.get("text")]
+    all_titles = [q.get("title", "") for q in world_graph.get_active_quests() + world_graph.get_available_quests()]
+
+    return DialogueContext(
+        session_id=session_id,
+        npc_id=npc_id,
+        npc_name=npc_name,
+        player_name=session.player.name,
+        player_level=session.player.level,
+        player_house=str(session.player.house),
+        player_reputation=dict(session.player.reputation),
+        location_name=(world_graph.get_location_info(session.player.current_location) or {}).get("label", session.player.current_location),
+        npc_memories=mem_texts,
+        active_quest_titles=all_titles,
+        key_beats=mem.key_beats[-6:],
+    )
+
+
+@app.post("/api/dialogue/start")
+async def start_dialogue(session_id: str, npc_id: str):
+    """Begin a conversation with an NPC."""
+    node = world_graph.graph.nodes.get(npc_id, {})
+    npc_name = node.get("label", npc_id)
+    ctx = _build_dialogue_ctx(session_id, npc_id, npc_name)
+    result = await dialogue_engine.start(ctx)
+
+    # Record in NPC memory
+    npc_memory_store.record(npc_id, f"The player started a conversation", session_id)
+    return result
+
+
+@app.post("/api/dialogue/reply")
+async def dialogue_reply(session_id: str, npc_id: str, player_says: str):
+    """Player says something in an ongoing conversation."""
+    node = world_graph.graph.nodes.get(npc_id, {})
+    npc_name = node.get("label", npc_id)
+    ctx = _build_dialogue_ctx(session_id, npc_id, npc_name)
+    result = await dialogue_engine.reply(session_id, npc_id, player_says, ctx)
+
+    # Apply reputation changes from this dialogue turn
+    if result.get("reputation_change"):
+        session = get_or_create_session(session_id)
+        ws = get_world_state(session_id)
+        for faction, delta in result["reputation_change"].items():
+            ws.adjust_reputation(faction, delta)
+            if faction in session.player.reputation:
+                session.player.reputation[faction] += delta
+
+    # If NPC offered an item, give it to the player
+    if result.get("item_offered"):
+        session = get_or_create_session(session_id)
+        inst = make_item_instance(result["item_offered"])
+        if inst and len(session.player.inventory) < 20:
+            session.player.inventory.append(inst)
+            result["item_given"] = inst
+
+    # Record what the player said
+    npc_memory_store.record(npc_id, f"The player said: {player_says[:100]}", session_id)
+    return result
+
+
+@app.get("/api/dialogue/{session_id}/{npc_id}")
+async def get_dialogue_history(session_id: str, npc_id: str):
+    """Get conversation history with an NPC."""
+    return {"history": dialogue_engine.get_history(session_id, npc_id)}
+
+
+@app.post("/api/dialogue/end")
+async def end_dialogue(session_id: str, npc_id: str):
+    """End the current conversation."""
+    dialogue_engine.end_conversation(session_id, npc_id)
+    return {"ended": True, "summary": dialogue_engine.summary(session_id)}
 
 
 # ── Dynamic Quests ─────────────────────────────────────────────────────────────

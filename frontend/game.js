@@ -429,6 +429,13 @@ async function submitPlayerInput() {
   GameState.playerStats.turns_played++;
   document.getElementById('turn-count').textContent = GameState.turnCount;
 
+  // Check for dialogue triggers (talk/speak/ask NPC name)
+  const dialogueTrigger = checkDialogueTrigger(text);
+  if (dialogueTrigger && GameState.backendConnected) {
+    await openDialogue(dialogueTrigger.id, dialogueTrigger.name);
+    return;
+  }
+
   // Check for combat triggers
   const combatTrigger = checkCombatTrigger(text);
   if (combatTrigger) {
@@ -1089,7 +1096,7 @@ function updateInventory() {
   if (!grid) return;
 
   const items = GameState.playerStats.inventory;
-  count.textContent = `${items.length}/12`;
+  count.textContent = `${items.length}/20`;
 
   if (items.length === 0) {
     grid.innerHTML = '<div class="inventory-empty">Your bag is empty...</div>';
@@ -1097,13 +1104,291 @@ function updateInventory() {
   }
 
   grid.innerHTML = '';
-  items.forEach(item => {
+  items.forEach((item, idx) => {
     const slot = document.createElement('div');
-    slot.className = 'inventory-slot';
-    slot.textContent = item.emoji || '📦';
-    slot.title = `${item.name}\n${item.galleons ? `Worth: ${item.galleons}G` : ''}`;
+    slot.className = `inventory-slot rarity-${item.rarity || 'common'}`;
+
+    // Build effects summary for tooltip
+    const effectLines = (item.effects || []).map(e => {
+      if (e.type === 'heal_hp')       return `+${e.amount} HP`;
+      if (e.type === 'restore_mana')  return `+${e.amount} MP`;
+      if (e.type === 'buff')          return `${e.stat} +${e.amount} (${e.duration || 1}t)`;
+      if (e.type === 'teach_spell')   return `Teaches ${e.spell}`;
+      if (e.type === 'cleanse')       return 'Cleanse';
+      return e.type;
+    });
+    const effectStr = effectLines.join(' | ') || 'No effect';
+    const rarity = item.rarity || 'common';
+
+    slot.innerHTML = `
+      <div class="inv-emoji">${item.emoji || '📦'}</div>
+      <div class="inv-name">${item.name || 'Item'}</div>
+    `;
+    slot.title = `${item.name}\n${item.description || ''}\n\nEffect: ${effectStr}\nRarity: ${rarity}`;
+
+    // Context menu on click
+    slot.addEventListener('click', () => showItemMenu(item, idx));
     grid.appendChild(slot);
   });
+}
+
+// ── Item context menu ─────────────────────────────────────────────────────────
+
+function showItemMenu(item, idx) {
+  // Remove any existing menu
+  document.querySelectorAll('.item-context-menu').forEach(m => m.remove());
+
+  const menu = document.createElement('div');
+  menu.className = 'item-context-menu';
+  const hasEffect = item.effects && item.effects.length > 0;
+  const usable = item.type !== 'ingredient';
+
+  menu.innerHTML = `
+    <div class="item-menu-header">
+      <span>${item.emoji || '📦'}</span>
+      <strong>${item.name}</strong>
+      <span class="item-rarity-tag rarity-${item.rarity || 'common'}">${item.rarity || 'common'}</span>
+    </div>
+    <p class="item-menu-desc">${item.description || ''}</p>
+    <div class="item-menu-actions">
+      ${usable && hasEffect ? `<button class="item-btn use" data-item-id="${item.id}">✨ Use</button>` : ''}
+      <button class="item-btn drop" data-item-id="${item.id}">🗑 Drop</button>
+      <button class="item-btn cancel">✖ Cancel</button>
+    </div>
+  `;
+
+  document.body.appendChild(menu);
+
+  menu.querySelector('.cancel')?.addEventListener('click', () => menu.remove());
+  menu.querySelector('.use')?.addEventListener('click', async () => {
+    menu.remove();
+    await handleUseItem(item.id);
+  });
+  menu.querySelector('.drop')?.addEventListener('click', async () => {
+    menu.remove();
+    await handleDropItem(item.id);
+  });
+
+  // Close on outside click
+  setTimeout(() => {
+    document.addEventListener('click', function handler(e) {
+      if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', handler); }
+    });
+  }, 50);
+}
+
+async function handleUseItem(itemId) {
+  if (!GameState.backendConnected || !GameState.sessionId) return;
+  try {
+    const result = await Narrator.useItem(GameState.sessionId, itemId);
+    // Update local player stats from response
+    if (result.success) {
+      // Refetch inventory from backend to get updated state
+      const inv = await Narrator.getInventory(GameState.sessionId);
+      GameState.playerStats.inventory = inv.inventory || [];
+      updateInventory();
+      updatePlayerUI();
+      showItemUseToast(result.item_emoji, result.item_name, result.message);
+      addNarrativeEntry('dm', `*You use the ${result.item_name}. ${result.message}.*`, 'warm');
+    }
+  } catch (e) {
+    console.error('[Item] Use failed:', e);
+  }
+}
+
+async function handleDropItem(itemId) {
+  if (!GameState.backendConnected || !GameState.sessionId) return;
+  try {
+    const result = await Narrator.dropItem(GameState.sessionId, itemId);
+    if (result.dropped) {
+      GameState.playerStats.inventory = GameState.playerStats.inventory.filter(i => i.id !== itemId);
+      updateInventory();
+      addNarrativeEntry('dm', `*You set the ${result.item?.name || 'item'} aside.*`, 'mysterious');
+    }
+  } catch (e) { console.error('[Item] Drop failed:', e); }
+}
+
+function showItemUseToast(emoji, name, effect) {
+  const toast = document.getElementById('item-use-toast');
+  if (!toast) return;
+  document.getElementById('item-toast-emoji').textContent = emoji || '📦';
+  document.getElementById('item-toast-name').textContent = name;
+  document.getElementById('item-toast-effect').textContent = effect;
+  toast.classList.remove('hidden');
+  toast.classList.add('show');
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.classList.add('hidden'), 350);
+  }, 3000);
+}
+
+// ── NPC Dialogue System ───────────────────────────────────────────────────────
+
+const DialogueState = {
+  active: false,
+  npcId: null,
+  npcName: null,
+};
+
+const NPC_EMOJIS = {
+  npc_001: '🍺', npc_002: '🌿', npc_003: '🎓', npc_004: '⚡',
+  npc_005: '💀', npc_006: '🕵️', npc_007: '⭐', npc_008: '⚖️',
+  npc_009: '❓', npc_010: '🌑',
+};
+
+const MOOD_EMOJIS = {
+  friendly: '😊', neutral: '😐', suspicious: '🤨',
+  worried: '😰', excited: '😄', guarded: '🛡️', amused: '😏'
+};
+
+async function openDialogue(npcId, npcName) {
+  if (!GameState.backendConnected || !GameState.sessionId) {
+    addNarrativeEntry('dm', `*You approach ${npcName}. (Connect to backend for interactive dialogue.)*`, 'mysterious');
+    return;
+  }
+  DialogueState.active = true;
+  DialogueState.npcId = npcId;
+  DialogueState.npcName = npcName;
+
+  document.getElementById('dialogue-npc-name').textContent = npcName;
+  document.getElementById('dialogue-avatar').textContent = NPC_EMOJIS[npcId] || '🧙';
+  document.getElementById('dialogue-scroll').innerHTML = '';
+  document.getElementById('dialogue-topics').innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:8px">Opening conversation...</div>';
+  document.getElementById('dialogue-modal').classList.remove('hidden');
+
+  try {
+    const result = await Narrator.startDialogue(GameState.sessionId, npcId);
+    renderDialogueTurn(result);
+  } catch (e) {
+    document.getElementById('dialogue-scroll').innerHTML = '<p style="color:var(--color-danger);padding:8px">Could not connect to NPC.</p>';
+  }
+}
+
+function renderDialogueTurn(result) {
+  const scroll = document.getElementById('dialogue-scroll');
+  const topicsEl = document.getElementById('dialogue-topics');
+  const moodEl = document.getElementById('dialogue-mood');
+
+  // Mood badge
+  const mood = result.mood || 'neutral';
+  moodEl.textContent = `${MOOD_EMOJIS[mood] || '😐'} ${mood}`;
+
+  // NPC speech bubble
+  const bubble = document.createElement('div');
+  bubble.className = 'dialogue-bubble npc-bubble';
+  bubble.innerHTML = `<div class="bubble-name">${result.npc_name || DialogueState.npcName}</div>
+    <div class="bubble-text">${escapeHtml(result.npc_says || '')}</div>`;
+  scroll.appendChild(bubble);
+  scroll.scrollTop = scroll.scrollHeight;
+
+  // Lore reveal
+  if (result.lore_revealed) {
+    const loreEl = document.createElement('div');
+    loreEl.className = 'dialogue-lore-reveal';
+    loreEl.textContent = `📚 ${result.lore_revealed}`;
+    scroll.appendChild(loreEl);
+  }
+
+  // Item given
+  if (result.item_given) {
+    const itemEl = document.createElement('div');
+    itemEl.className = 'dialogue-item-given';
+    itemEl.textContent = `🎁 Received: ${result.item_given.emoji || ''} ${result.item_given.name}`;
+    scroll.appendChild(itemEl);
+    GameState.playerStats.inventory.push(result.item_given);
+    updateInventory();
+  }
+
+  // Topic buttons
+  topicsEl.innerHTML = '';
+  (result.topics || []).forEach(topic => {
+    const btn = document.createElement('button');
+    btn.className = 'dialogue-topic-btn';
+    btn.textContent = topic;
+    btn.addEventListener('click', async () => {
+      await sendDialogueReply(topic);
+    });
+    topicsEl.appendChild(btn);
+  });
+}
+
+async function sendDialogueReply(playerSays) {
+  if (!DialogueState.npcId) return;
+  const scroll = document.getElementById('dialogue-scroll');
+  const topicsEl = document.getElementById('dialogue-topics');
+
+  // Show player's choice
+  const playerBubble = document.createElement('div');
+  playerBubble.className = 'dialogue-bubble player-bubble';
+  playerBubble.textContent = playerSays;
+  scroll.appendChild(playerBubble);
+  scroll.scrollTop = scroll.scrollHeight;
+  topicsEl.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:8px">...</div>';
+
+  try {
+    const result = await Narrator.replyDialogue(GameState.sessionId, DialogueState.npcId, playerSays);
+    renderDialogueTurn(result);
+
+    if (!result.conversation_active) {
+      closeDialogue();
+    }
+  } catch (e) {
+    topicsEl.innerHTML = '<div style="color:var(--color-danger)">Connection error</div>';
+  }
+}
+
+function closeDialogue() {
+  if (DialogueState.npcId && GameState.sessionId) {
+    Narrator.endDialogue(GameState.sessionId, DialogueState.npcId).catch(() => {});
+  }
+  DialogueState.active = false;
+  DialogueState.npcId = null;
+  document.getElementById('dialogue-modal').classList.add('hidden');
+}
+
+function initDialogue() {
+  document.getElementById('dialogue-close-btn')?.addEventListener('click', closeDialogue);
+
+  const customInput = document.getElementById('dialogue-custom-input');
+  const sendBtn = document.getElementById('dialogue-send-btn');
+
+  sendBtn?.addEventListener('click', async () => {
+    const text = customInput?.value.trim();
+    if (text && DialogueState.active) {
+      customInput.value = '';
+      await sendDialogueReply(text);
+    }
+  });
+
+  customInput?.addEventListener('keydown', async (e) => {
+    if (e.key === 'Enter') {
+      const text = customInput.value.trim();
+      if (text && DialogueState.active) {
+        customInput.value = '';
+        await sendDialogueReply(text);
+      }
+    }
+  });
+}
+
+// Detect "talk to [NPC]" in player input and open dialogue
+function checkDialogueTrigger(text) {
+  const lower = text.toLowerCase();
+  const NPC_TRIGGERS = {
+    'rosmerta':   { id: 'npc_001', name: 'Madam Rosmerta' },
+    'longbottom': { id: 'npc_002', name: 'Professor Longbottom' },
+    'neville':    { id: 'npc_002', name: 'Professor Longbottom' },
+    'mcgonagall': { id: 'npc_003', name: 'Headmistress McGonagall' },
+    'firenze':    { id: 'npc_007', name: 'Firenze' },
+    'shacklebolt':{ id: 'npc_008', name: 'Minister Shacklebolt' },
+    'kingsley':   { id: 'npc_008', name: 'Minister Shacklebolt' },
+    'borgin':     { id: 'npc_005', name: 'Borgin' },
+  };
+  if (!lower.includes('talk') && !lower.includes('speak') && !lower.includes('ask') && !lower.includes('approach')) return null;
+  for (const [keyword, npc] of Object.entries(NPC_TRIGGERS)) {
+    if (lower.includes(keyword)) return npc;
+  }
+  return null;
 }
 
 function updateSuggestions(actions) {
@@ -1363,6 +1648,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initInputHandlers();
   initBottomBarHandlers();
   initVoice();
+  initDialogue();
 
   // Periodic emotion check
   setInterval(async () => {
