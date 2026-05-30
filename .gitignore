@@ -61,6 +61,12 @@ rl_data/
 # ── NPC long-term memory store (runtime state) ──────────────────────────────
 npc_memory_store/
 
+# ── Save files (player game progress — runtime state) ───────────────────────
+backend/saves/
+
+# ── World state (per-session world mutations — runtime state) ────────────────
+backend/world_state/
+
 # ── Jupyter ─────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 *.ipynb
@@ -83,6 +89,10 @@ npm-debug.log*
 tmp/
 temp/
 scratch/
+
+# ── LoRA training artifacts (adapter weights + generated dataset) ────────────
+backend/lora_train/adapter/
+backend/lora_train/training_data/
 
 # ── Claude Code local config & dev helpers ──────────────────────────────────
 .claude/

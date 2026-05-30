@@ -84,8 +84,16 @@ Player Input (Text)
 | RAG Pipeline | sentence-transformers + cosine | ✅ Phase 2 |
 | Persistent Vectors | Disk-backed NPC embedding store | ✅ Phase 2.5 |
 | RL Enemy Agent | Tabular Q-learning (adaptive) | ✅ Phase 4 |
-| Stable Diffusion | Photoreal scene images (optional upgrade) | 📅 Phase 3+ |
-| Fine-tuned LLM | LoRA on HP corpus | 📅 Phase 6 |
+| Stable Diffusion | Photoreal scene images (diffusers or A1111) | ✅ Phase 3+ |
+| Save / Load System | Disk-backed session persistence (JSON) | ✅ Phase 5 |
+| Level Progression | XP → Level 1-20, spell unlocks, titles | ✅ Phase 5 |
+| Vector DB | ChromaDB / numpy pluggable vector store | ✅ Phase 6 |
+| Dynamic Quests | LLM-generated side quests from story state | ✅ Phase 7 |
+| LoRA Fine-tune | QLoRA training pipeline + HP DM dataset | ✅ Phase 8 |
+| World State | Quest/location persistence across restarts | ✅ Phase 9 |
+| TTS Voice | Coqui GPU / pyttsx3 / ElevenLabs narration | ✅ Phase 9 |
+| Item System | 21 HP items, loot tables, use/drop effects | ✅ Phase 10 |
+| NPC Dialogue | Multi-turn structured NPC conversations | ✅ Phase 10 |
 
 ---
 
@@ -165,9 +173,69 @@ ai-dungeon-master/
 - **Layered display** — the frontend fetches and caches the generated image per location and fades it in over the canvas fallback
 - **`/api/generate-scene`** — returns a base64 PNG data URL
 
+### ✅ Phase 5 (Current)
+- **Full game persistence** — every session auto-saves every 5 turns to `backend/saves/` as JSON; manual save via the 💾 button (server-backed when online, localStorage when offline)
+- **Load saved game** — "Load Saved Game" on the character-creation screen fetches all saves from the server, shows name / level / title / turn count, and resumes a full live session
+- **Server-side progression** — authoritative XP/level system (levels 1–20); XP thresholds follow a `100·lvl^1.5` curve; spell unlocks at levels 1, 3, 5, 7, 10, 12, 15, 18, 20; wizard title advances with each tier
+- **Level-up toast** — animated full-screen overlay fires on level-up, showing the new level, title, and any newly unlocked spells; frontend is immediately updated with server-authoritative `updated_player` data
+- **Endpoints**: `POST /api/save/{session_id}`, `GET /api/saves`, `POST /api/load?filename=`, `DELETE /api/save/{filename}`
+- **`backend/progression.py`** — authoritative XP table, `process_xp_gain()`, `spells_for_level()`, `title_for_level()`
+- **`backend/save_manager.py`** — `SaveManager` class with save/load/list/delete and per-player pruning (keeps 30 most recent saves)
+
+### ✅ Phase 3+ (Current)
+- **Stable Diffusion integration** — two backends in one:
+  - `IMAGE_PROVIDER=diffusers`: HuggingFace `diffusers` pipeline runs directly in the backend process — no separate server, just `pip install diffusers transformers accelerate safetensors` + a CUDA-enabled PyTorch. Pipeline loads on startup in a background thread; requests block until ready then stream from the cache.
+  - `IMAGE_PROVIDER=stable_diffusion`: calls an AUTOMATIC1111 `/sdapi/v1/txt2img` API (point `SD_API_URL` at your running instance).
+- **Configurable model** — `SD_MODEL_ID=runwayml/stable-diffusion-v1-5` by default; swap in any HuggingFace model ID
+- **Deterministic per-location seed** — same location always produces the same art; mood changes the prompt
+- **SD generating overlay** — spinner appears over the scene panel while the pipeline runs; auto-clears when the image arrives
+- **Pipeline warmup polling** — frontend polls `/api/sd-status` at startup; once the model finishes loading it automatically fetches the first scene
+- **Auto-fallback** — if diffusers errors (VRAM OOM, model missing), falls back to the procedural renderer silently
+
+### ✅ Phase 6 (Current)
+- **Pluggable vector store** — new `backend/vector_store.py` provides a unified `VectorStore` interface backed by ChromaDB (persistent, production-ready) or numpy (zero-install fallback). Auto-detects which is available at startup.
+- **ChromaDB backend** — `pip install chromadb` to activate; data persists to `backend/chroma_db/` (gitignored); uses `PersistentClient` with HNSWLib cosine similarity and `SentenceTransformerEmbeddingFunction`; metadata filtering for NPC memory (filter by `npc_id`)
+- **numpy fallback** — all features continue to work without ChromaDB; includes keyword overlap fallback when embeddings are unavailable
+- **RAG upgrade** — `rag.py` now uses `VectorStore`; lore index upserted once and reused (Chroma is persistent across restarts — no more `.npz` cache files to manage)
+- **NPC memory upgrade** — `npc_memory.py` uses `VectorStore`; memories are seeded from persisted JSON on startup; new memories upserted individually on `record()`; recall uses Chroma's `where` filter for efficient per-NPC queries
+- **Config**: `VECTOR_BACKEND=auto|chroma|numpy`, `EMBED_MODEL=all-MiniLM-L6-v2`
+
+### ✅ Phase 7 (Current)
+- **Dynamic quest generation** — `backend/quest_generator.py` builds a `QuestContext` from the player's current location, NPCs present, recent story beats, level, and reputation, then asks the LLM (Ollama/OpenAI) to output a structured JSON quest. Falls back to a hand-authored library of 19 location-specific templates (3 per location) when the LLM is offline or unavailable.
+- **Smart trigger logic** — generation fires automatically every 5 turns and/or on location change, capped at 3 active generated quests per session; a `POST /api/generate-quest?force=true` endpoint allows manual triggering
+- **Quest discovery UX** — the hook sentence is woven into the narrative as a DM entry 0.8 s after generation; a purple slide-in toast (top-right) shows the title, difficulty, and XP reward for 4 s
+- **✨ badge in quest log** — generated quests render with a purple glow border and ✨ prefix to distinguish them from static quests; clicking shows the same detail view
+- **Session restore** — dynamic quests are fetched via `GET /api/dynamic-quests/{session_id}` when loading a saved game, so the quest log is fully restored
+- **New API**: `POST /api/generate-quest`, `GET /api/dynamic-quests/{session_id}`
+
+### ✅ Phase 8 (Current)
+- **HP DM dataset** — `backend/lora_train/dataset_builder.py` builds a ShareGPT-format JSONL: 37 hand-authored DM examples (atmospheric narration per location, NPC conversations, combat, spellcasting) + auto-generated examples from world lore (location arrivals, NPC encounters, spell effects) = **67 examples** from static corpus alone
+- **Self-distillation generator** — `lora_train/generate_data.py` uses the running Ollama instance to generate 100+ additional examples (20 player actions × 7 locations), teaching the same HP DM voice at scale; output merged into the training corpus via `build_dataset(extra_path=...)`
+- **QLoRA training** — `lora_train/train.py`: 4-bit quantized LoRA on `microsoft/phi-3-mini-4k-instruct` (3.8 B params, ~8 GB VRAM for training). PEFT + TRL `SFTTrainer`. LoRA rank 16 / alpha 32, cosine LR schedule, 3 epochs, paged AdamW 8-bit. Adapter saved to `lora_train/adapter/` (~50–150 MB). Model family auto-detects correct LoRA target modules (Phi-3, Llama, Mistral, Qwen).
+- **LoRA inference** — `lora_train/infer.py` lazy-loads model + adapter once at startup in a background thread (same pattern as SD diffusers), runs generation in `run_in_executor` so the event loop stays free
+- **`LLM_PROVIDER=lora`** — `narrator.py` routes to `lora_train/infer.py`; `main.py` calls `warmup_lora()` at startup and falls back to mock mode if the adapter isn't found
+
+**To train and activate:**
+```bash
+# 1. Install dependencies
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip install peft trl bitsandbytes datasets
+
+# 2. (Optional) generate extra training data using your running Ollama
+python backend/lora_train/generate_data.py --num 100
+
+# 3. Train (~30-60 min on a mid-range GPU)
+python backend/lora_train/train.py
+
+# 4. Activate in .env
+LLM_PROVIDER=lora
+LORA_BASE_MODEL=microsoft/phi-3-mini-4k-instruct
+LORA_ADAPTER_PATH=backend/lora_train/adapter
+```
+
 ### 📅 Next
-- **Stable Diffusion upgrade** (`IMAGE_PROVIDER=stable_diffusion`) — photoreal scene art via a running AUTOMATIC1111 server; the hook already exists in `image_gen.py`
-- Larger-scale persistent vector DB (Chroma/FAISS) for cross-session recall beyond the current disk cache
+- World state persistence (completed quests / visited locations survive restarts)
+- Voice narration via TTS (ElevenLabs / Coqui)
 
 ---
 
