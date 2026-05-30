@@ -428,6 +428,49 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- NPC DIALOGUE MODAL -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="dialogue-modal" class="modal-overlay hidden" style="z-index:1500">
+  <div class="modal-box dialogue-box">
+    <div class="modal-rune-border"></div>
+    <div class="dialogue-header">
+      <div class="dialogue-npc-avatar" id="dialogue-avatar">🧙</div>
+      <div>
+        <h2 class="dialogue-npc-name" id="dialogue-npc-name">Professor Longbottom</h2>
+        <div class="dialogue-mood-badge" id="dialogue-mood">😐 neutral</div>
+      </div>
+      <button class="icon-btn" id="dialogue-close-btn" title="End conversation">✖</button>
+    </div>
+
+    <div class="dialogue-scroll" id="dialogue-scroll">
+      <!-- Filled by JS -->
+    </div>
+
+    <div class="dialogue-topics" id="dialogue-topics">
+      <!-- Topic buttons filled by JS -->
+    </div>
+
+    <div class="dialogue-input-row">
+      <input type="text" id="dialogue-custom-input" class="form-input" placeholder="Or type your own response..." maxlength="200" />
+      <button class="send-btn" id="dialogue-send-btn">⚡</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- ITEM USE NOTIFICATION -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="item-use-toast" class="item-use-toast hidden">
+  <div class="item-toast-inner">
+    <span id="item-toast-emoji">🧪</span>
+    <div>
+      <div class="item-toast-name" id="item-toast-name">Healing Potion</div>
+      <div class="item-toast-effect" id="item-toast-effect">Restored 50 HP</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- COMBAT FULL SCREEN OVERLAY -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <div id="combat-overlay" class="combat-overlay hidden">
