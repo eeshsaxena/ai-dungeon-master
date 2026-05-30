@@ -61,6 +61,9 @@ rl_data/
 # ── NPC long-term memory store (runtime state) ──────────────────────────────
 npc_memory_store/
 
+# ── Save files (player game progress — runtime state) ───────────────────────
+backend/saves/
+
 # ── Jupyter ─────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 *.ipynb

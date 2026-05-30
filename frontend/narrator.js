@@ -146,6 +146,33 @@ const Narrator = (() => {
     return await r.json();
   }
 
+  // ── Save / Load ─────────────────────────────────────────────────────────
+
+  async function saveGame(sessionId) {
+    const r = await fetch(`${API_BASE}/api/save/${sessionId}`, { method: 'POST' });
+    if (!r.ok) throw new Error(`Save failed: ${r.status}`);
+    return await r.json();
+  }
+
+  async function listSaves() {
+    const r = await fetch(`${API_BASE}/api/saves`);
+    if (!r.ok) throw new Error(`List saves failed: ${r.status}`);
+    return await r.json();
+  }
+
+  async function loadGame(filename) {
+    const params = new URLSearchParams({ filename });
+    const r = await fetch(`${API_BASE}/api/load?${params}`, { method: 'POST' });
+    if (!r.ok) throw new Error(`Load failed: ${r.status}`);
+    return await r.json();
+  }
+
+  async function deleteSave(filename) {
+    const r = await fetch(`${API_BASE}/api/save/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(`Delete failed: ${r.status}`);
+    return await r.json();
+  }
+
   async function classifyEmotion(sessionId, recentInputs, turnsWithoutProgress = 0) {
     const body = {
       session_id: sessionId,
@@ -217,6 +244,10 @@ Behind the bar, Madam Rosmerta polishes a glass and watches your exchange with e
     getQuests,
     generateScene,
     classifyEmotion,
+    saveGame,
+    listSaves,
+    loadGame,
+    deleteSave,
     getMockResponse,
     MOCK_OPENING,
     get isConnected() { return wsConnected; }
