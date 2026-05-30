@@ -15,6 +15,8 @@ const GameState = {
     house: 'Unselected',
     level: 1,
     xp: 0,
+    xp_to_next: 300,
+    title: 'First-Year',
     hp: 100,
     max_hp: 100,
     mana: 80,
@@ -57,8 +59,29 @@ const GameState = {
   quests: [],
 };
 
-// XP required per level
-const XP_TABLE = [0, 300, 700, 1300, 2100, 3200, 4600, 6300, 8400, 11000];
+// XP required to REACH each level (matches backend progression.py, 20 levels)
+const XP_TABLE = [
+  0,    // 1
+  300,  // 2
+  500,  // 3
+  800,  // 4
+  1100, // 5
+  1450, // 6
+  1850, // 7
+  2250, // 8
+  2700, // 9
+  3150, // 10
+  3650, // 11
+  4150, // 12
+  4700, // 13
+  5250, // 14
+  5800, // 15
+  6400, // 16
+  7000, // 17
+  7650, // 18
+  8300, // 19
+  8950, // 20
+];
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOADING SEQUENCE
@@ -129,12 +152,8 @@ function initCharacterCreation() {
   const beginBtn = document.getElementById('begin-adventure-btn');
   const houseBtns = document.querySelectorAll('.house-btn');
 
-  // Name input handler
-  nameInput.addEventListener('input', () => {
-    validateCharCreation();
-  });
+  nameInput.addEventListener('input', () => { validateCharCreation(); });
 
-  // House selection
   houseBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       houseBtns.forEach(b => b.classList.remove('selected'));
@@ -144,20 +163,112 @@ function initCharacterCreation() {
     });
   });
 
-  // Begin button
   beginBtn.addEventListener('click', async () => {
     const name = nameInput.value.trim();
     if (!name || !GameState.selectedHouse) return;
     await startGame(name, GameState.selectedHouse);
   });
 
-  // Enter key support
   nameInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       const name = nameInput.value.trim();
       if (name && GameState.selectedHouse) startGame(name, GameState.selectedHouse);
     }
   });
+
+  // Load Game button — opens save list modal
+  document.getElementById('load-game-btn').addEventListener('click', async () => {
+    await openSaveListModal();
+  });
+
+  // Close save list modal
+  document.getElementById('close-save-list-btn').addEventListener('click', () => {
+    document.getElementById('save-list-modal').classList.add('hidden');
+  });
+}
+
+async function openSaveListModal() {
+  const modal = document.getElementById('save-list-modal');
+  const listEl = document.getElementById('save-list-items');
+  modal.classList.remove('hidden');
+  listEl.innerHTML = '<p class="saves-empty">Loading saves...</p>';
+
+  try {
+    const data = await Narrator.listSaves();
+    const saves = data.saves || [];
+    if (saves.length === 0) {
+      listEl.innerHTML = '<p class="saves-empty">No saved games found.</p>';
+      return;
+    }
+    listEl.innerHTML = '';
+    saves.forEach(save => {
+      const item = document.createElement('div');
+      item.className = 'save-item';
+      const ts = save.saved_at ? new Date(save.saved_at * 1000).toLocaleString() : 'Unknown time';
+      const HOUSE_ICONS = { Gryffindor: '🦁', Hufflepuff: '🦡', Ravenclaw: '🦅', Slytherin: '🐍', Unselected: '⚡' };
+      item.innerHTML = `
+        <div class="save-item-info">
+          <div class="save-item-name">${HOUSE_ICONS[save.house] || '⚡'} ${save.player_name}</div>
+          <div class="save-item-meta">${save.title} · Turn ${save.turns} · ${ts}</div>
+        </div>
+        <div class="save-item-level">Lv ${save.level}<br>${save.xp} XP</div>
+        <button class="save-delete-btn" data-filename="${save.filename}" title="Delete save">🗑</button>
+      `;
+      // Load on click (not on delete button)
+      item.querySelector('.save-item-info, .save-item-level').addEventListener
+        ? item.addEventListener('click', async (e) => {
+            if (e.target.classList.contains('save-delete-btn')) return;
+            await loadSaveFile(save.filename);
+          })
+        : null;
+      item.addEventListener('click', async (e) => {
+        if (e.target.classList.contains('save-delete-btn')) {
+          e.stopPropagation();
+          if (!confirm(`Delete save for ${save.player_name}?`)) return;
+          try { await Narrator.deleteSave(save.filename); } catch {}
+          await openSaveListModal();
+          return;
+        }
+        await loadSaveFile(save.filename);
+      });
+      listEl.appendChild(item);
+    });
+  } catch {
+    listEl.innerHTML = '<p class="saves-empty">Could not load saves (backend offline?)</p>';
+  }
+}
+
+async function loadSaveFile(filename) {
+  const modal = document.getElementById('save-list-modal');
+  modal.classList.add('hidden');
+  document.getElementById('char-creation-modal').classList.add('hidden');
+
+  try {
+    const data = await Narrator.loadGame(filename);
+    GameState.sessionId = data.session_id;
+    GameState.backendConnected = true;
+    Object.assign(GameState.playerStats, data.player);
+    GameState.currentLocation = data.player.current_location || 'loc_001';
+    GameState.turnCount = data.player.turns_played || 1;
+
+    document.getElementById('game-container').classList.remove('hidden');
+    updatePlayerUI();
+    renderSpellbook();
+    renderReputation();
+    initKnowledgeGraph();
+    try {
+      const questData = await Narrator.getQuests();
+      GameState.quests = questData.quests || [];
+    } catch {}
+    renderQuestLog();
+    renderScene(GameState.currentLocation, 'mysterious');
+
+    addNarrativeEntry('dm', `✨ *Welcome back, ${data.player.name}!* Your adventure continues where you left off...`, 'warm');
+    document.getElementById('player-input').focus();
+  } catch (e) {
+    document.getElementById('char-creation-modal').classList.remove('hidden');
+    alert('Failed to load save: ' + e.message);
+  }
 }
 
 function validateCharCreation() {
@@ -420,13 +531,16 @@ async function triggerCombat(archetype) {
       if (result.player_won) {
         GameState.playerStats.xp += result.xp_gained || 0;
         if (result.loot?.length > 0) {
-          result.loot.forEach(item => {
-            GameState.playerStats.inventory.push(item);
-          });
+          result.loot.forEach(item => GameState.playerStats.inventory.push(item));
           updateInventory();
         }
         addNarrativeEntry('dm', `*You stand victorious! The ${enemy.name} is defeated.* ✨`, 'warm');
-        checkLevelUp();
+        // Server-authoritative level-up (or client fallback in offline mode)
+        if (result.level_up) {
+          applyServerLevelUp(result);
+        } else {
+          checkLevelUp();
+        }
       } else {
         GameState.playerStats.hp = 10;
         addNarrativeEntry('dm', `*You barely escape with your life... You need to recover.* 💀`, 'dangerous');
@@ -649,9 +763,19 @@ function updateSceneAtmosphere(atmosphere) {
 function updatePlayerUI() {
   const p = GameState.playerStats;
 
-  // Name & house
+  // Name, title & house
   document.getElementById('player-name-display').textContent = p.name;
   document.getElementById('player-level').textContent = p.level;
+  // Title badge — create once, update thereafter
+  let titleEl = document.getElementById('player-title-badge');
+  if (!titleEl) {
+    titleEl = document.createElement('div');
+    titleEl.id = 'player-title-badge';
+    titleEl.className = 'player-title-badge';
+    const nameEl = document.getElementById('player-name-display');
+    nameEl.parentNode.insertBefore(titleEl, nameEl.nextSibling);
+  }
+  titleEl.textContent = p.title || 'First-Year';
 
   // House badge
   const HOUSE_CONFIG = {
@@ -681,14 +805,18 @@ function updatePlayerUI() {
   document.getElementById('mana-bar').style.width = manaPct + '%';
   document.getElementById('mana-numbers').textContent = `${p.mana}/${p.max_mana}`;
 
-  // XP
+  // XP — use server-provided xp_to_next when available
   const currentLevelXp = XP_TABLE[p.level - 1] || 0;
   const nextLevelXp = XP_TABLE[p.level] || 99999;
   const xpInLevel = p.xp - currentLevelXp;
   const xpNeeded = nextLevelXp - currentLevelXp;
-  const xpPct = (xpInLevel / xpNeeded) * 100;
+  const xpPct = xpNeeded > 0 ? (xpInLevel / xpNeeded) * 100 : 100;
   document.getElementById('xp-bar').style.width = Math.min(100, xpPct) + '%';
-  document.getElementById('xp-text').textContent = `${p.xp} / ${nextLevelXp} XP`;
+  if (p.level >= 20) {
+    document.getElementById('xp-text').textContent = `${p.xp} XP — MAX LEVEL`;
+  } else {
+    document.getElementById('xp-text').textContent = `${p.xp} / ${nextLevelXp} XP`;
+  }
 
   // Galleons
   document.getElementById('galleon-count').textContent = p.galleons;
@@ -698,17 +826,58 @@ function updatePlayerUI() {
 }
 
 function checkLevelUp() {
+  // Client-side level-up for offline mode only.
+  // When connected to the backend, level-up is driven by combat response data.
+  if (GameState.backendConnected) return;
   const p = GameState.playerStats;
   const nextLevelXp = XP_TABLE[p.level] || 99999;
-  if (p.xp >= nextLevelXp && p.level < 10) {
+  if (p.xp >= nextLevelXp && p.level < 20) {
     p.level++;
     p.max_hp += 10;
     p.hp = p.max_hp;
     p.max_mana += 5;
     p.mana = p.max_mana;
-    addNarrativeEntry('dm', `🎉 **Level Up!** You are now Level ${p.level}! Your magic grows stronger.`, 'warm');
+    showLevelUpToast(p.level, p.title || '', []);
     updatePlayerUI();
   }
+}
+
+function applyServerLevelUp(combatResult) {
+  if (!combatResult.level_up) return;
+  const p = GameState.playerStats;
+  if (combatResult.updated_player) {
+    // Use the full authoritative player from the server
+    Object.assign(p, combatResult.updated_player);
+  } else {
+    p.level = combatResult.new_level;
+    p.title = combatResult.new_title || p.title;
+    for (const spell of (combatResult.new_spells || [])) {
+      if (!p.spells_known.includes(spell)) p.spells_known.push(spell);
+    }
+  }
+  showLevelUpToast(p.level, p.title, combatResult.new_spells || []);
+  renderSpellbook();
+  updatePlayerUI();
+}
+
+function showLevelUpToast(level, title, newSpells) {
+  const toast = document.getElementById('levelup-toast');
+  if (!toast) return;
+  document.getElementById('levelup-title').textContent = `Level Up! → Level ${level}`;
+  document.getElementById('levelup-subtitle').textContent = title || '';
+  const spellsEl = document.getElementById('levelup-spells');
+  if (newSpells && newSpells.length > 0) {
+    spellsEl.textContent = `✨ New spells: ${newSpells.join(', ')}`;
+    spellsEl.style.display = '';
+  } else {
+    spellsEl.style.display = 'none';
+  }
+  toast.classList.remove('hidden');
+  toast.classList.add('show');
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.classList.add('hidden'), 450);
+  }, 4000);
 }
 
 function renderSpellbook() {
@@ -955,20 +1124,32 @@ async function initKnowledgeGraph() {
 // BOTTOM BAR HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════
 function initBottomBarHandlers() {
-  document.getElementById('save-btn').addEventListener('click', () => {
-    const saveData = JSON.stringify({
-      playerStats: GameState.playerStats,
-      currentLocation: GameState.currentLocation,
-      difficulty: GameState.difficulty,
-      turnCount: GameState.turnCount,
-      savedAt: new Date().toISOString()
-    });
-    localStorage.setItem('ai-dungeon-save', saveData);
-    // Visual feedback
+  document.getElementById('save-btn').addEventListener('click', async () => {
     const btn = document.getElementById('save-btn');
     const orig = btn.textContent;
-    btn.textContent = '✅ Saved!';
-    setTimeout(() => { btn.textContent = orig; }, 1500);
+    btn.textContent = '💾 Saving...';
+    btn.disabled = true;
+    try {
+      if (GameState.backendConnected && GameState.sessionId && !GameState.sessionId.startsWith('local-')) {
+        await Narrator.saveGame(GameState.sessionId);
+        btn.textContent = '✅ Saved!';
+      } else {
+        // Offline fallback — localStorage
+        localStorage.setItem('ai-dungeon-save', JSON.stringify({
+          playerStats: GameState.playerStats,
+          currentLocation: GameState.currentLocation,
+          difficulty: GameState.difficulty,
+          turnCount: GameState.turnCount,
+          savedAt: new Date().toISOString()
+        }));
+        btn.textContent = '✅ Saved (local)!';
+      }
+    } catch {
+      btn.textContent = '❌ Save failed';
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => { btn.textContent = orig; }, 2000);
+    }
   });
 
   document.getElementById('history-btn').addEventListener('click', () => {
