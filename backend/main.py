@@ -36,7 +36,8 @@ from knowledge_graph import world_graph
 from combat_ai import enemy_ai
 from emotion import emotion_classifier
 from memory import memory_manager
-from image_gen import generate_scene_image, build_scene_prompt
+from image_gen import generate_scene_image, build_scene_prompt, warmup_diffusers
+import image_gen as _image_gen
 from rag import lore_retriever
 from rl_agent import rl_agent
 from rl_train import simulate as rl_simulate
@@ -434,6 +435,23 @@ async def get_location(location_id: str):
     return {"location": info, "npcs": npcs}
 
 
+@app.get("/api/sd-status")
+async def sd_status():
+    """Report whether the Stable Diffusion pipeline is loaded and ready."""
+    provider = os.getenv("IMAGE_PROVIDER", "procedural")
+    if provider != "diffusers":
+        return {"provider": provider, "ready": provider == "procedural", "model": None}
+    ready = _image_gen._diffusers_pipeline is not None
+    error = _image_gen._diffusers_error
+    return {
+        "provider": "diffusers",
+        "ready": ready,
+        "loading": not ready and not error,
+        "error": error,
+        "model": _image_gen.SD_MODEL_ID,
+    }
+
+
 @app.post("/api/generate-scene")
 async def generate_scene(
     location_id: str = "loc_001",
@@ -590,6 +608,8 @@ async def startup():
           f"| {rls['episodes']} episodes, {rls['total_states']} states learned")
     ss = save_manager.stats()
     print(f"   Save System: {ss['save_count']} saves on disk ({ss['save_dir']})")
+    # Pre-warm SD pipeline in background (no-op if IMAGE_PROVIDER != "diffusers")
+    warmup_diffusers()
     print("   Ready!")
 
 

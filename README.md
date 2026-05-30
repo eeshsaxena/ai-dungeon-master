@@ -84,7 +84,7 @@ Player Input (Text)
 | RAG Pipeline | sentence-transformers + cosine | ✅ Phase 2 |
 | Persistent Vectors | Disk-backed NPC embedding store | ✅ Phase 2.5 |
 | RL Enemy Agent | Tabular Q-learning (adaptive) | ✅ Phase 4 |
-| Stable Diffusion | Photoreal scene images (optional upgrade) | 📅 Phase 3+ |
+| Stable Diffusion | Photoreal scene images (diffusers or A1111) | ✅ Phase 3+ |
 | Save / Load System | Disk-backed session persistence (JSON) | ✅ Phase 5 |
 | Level Progression | XP → Level 1-20, spell unlocks, titles | ✅ Phase 5 |
 | Fine-tuned LLM | LoRA on HP corpus | 📅 Phase 6 |
@@ -176,9 +176,19 @@ ai-dungeon-master/
 - **`backend/progression.py`** — authoritative XP table, `process_xp_gain()`, `spells_for_level()`, `title_for_level()`
 - **`backend/save_manager.py`** — `SaveManager` class with save/load/list/delete and per-player pruning (keeps 30 most recent saves)
 
+### ✅ Phase 3+ (Current)
+- **Stable Diffusion integration** — two backends in one:
+  - `IMAGE_PROVIDER=diffusers`: HuggingFace `diffusers` pipeline runs directly in the backend process — no separate server, just `pip install diffusers transformers accelerate safetensors` + a CUDA-enabled PyTorch. Pipeline loads on startup in a background thread; requests block until ready then stream from the cache.
+  - `IMAGE_PROVIDER=stable_diffusion`: calls an AUTOMATIC1111 `/sdapi/v1/txt2img` API (point `SD_API_URL` at your running instance).
+- **Configurable model** — `SD_MODEL_ID=runwayml/stable-diffusion-v1-5` by default; swap in any HuggingFace model ID
+- **Deterministic per-location seed** — same location always produces the same art; mood changes the prompt
+- **SD generating overlay** — spinner appears over the scene panel while the pipeline runs; auto-clears when the image arrives
+- **Pipeline warmup polling** — frontend polls `/api/sd-status` at startup; once the model finishes loading it automatically fetches the first scene
+- **Auto-fallback** — if diffusers errors (VRAM OOM, model missing), falls back to the procedural renderer silently
+
 ### 📅 Next
-- **Stable Diffusion upgrade** (`IMAGE_PROVIDER=stable_diffusion`) — photoreal scene art via a running AUTOMATIC1111 server; the hook already exists in `image_gen.py`
-- Larger-scale persistent vector DB (Chroma/FAISS) for cross-session recall beyond the current disk cache
+- Chroma/FAISS vector DB upgrade for scalable RAG and NPC memory
+- Phase 6: Fine-tuned LLM (LoRA on HP corpus)
 
 ---
 

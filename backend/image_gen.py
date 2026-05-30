@@ -4,9 +4,11 @@ Scene image generation for AI Dungeon Master.
 Providers (IMAGE_PROVIDER env var):
   - "procedural" (default): renders an atmospheric PNG server-side with Pillow —
     per-location silhouettes, mood-driven particles, gradient skies. No model,
-    no GPU, no network; the game ships with real generated scene art out of the box.
-  - "stable_diffusion": calls an AUTOMATIC1111 txt2img API for photoreal art
-    (Phase 3 upgrade, needs SD_API_URL running).
+    no GPU, no network.
+  - "diffusers": runs a Stable Diffusion pipeline directly via HuggingFace
+    diffusers — no separate server needed; requires GPU + pip install diffusers.
+  - "stable_diffusion": calls an AUTOMATIC1111 /sdapi/v1/txt2img API
+    (needs SD_API_URL running, e.g. http://127.0.0.1:7860).
   - "placeholder": legacy colour/description payload (no image).
 """
 import os
@@ -14,22 +16,36 @@ import io
 import base64
 import hashlib
 import random
-from typing import Optional, Dict, Tuple
+import threading
+from typing import Optional, Dict, Tuple, Any
 
 IMAGE_PROVIDER = os.getenv("IMAGE_PROVIDER", "procedural")
-SD_API_URL = os.getenv("SD_API_URL", "http://127.0.0.1:7860")
+SD_API_URL     = os.getenv("SD_API_URL", "http://127.0.0.1:7860")
+SD_MODEL_ID    = os.getenv("SD_MODEL_ID", "runwayml/stable-diffusion-v1-5")
+SD_STEPS       = int(os.getenv("SD_STEPS", "25"))
+SD_CFG         = float(os.getenv("SD_CFG", "7.5"))
 
 
 # ── Scene Prompt Templates ─────────────────────────────────────────────────────
 
+_SD_QUALITY = (
+    "cinematic lighting, highly detailed, concept art, artstation trending, "
+    "fantasy illustration, 8k resolution, sharp focus, professional"
+)
+_SD_NEG = (
+    "ugly, deformed, blurry, low quality, watermark, signature, text, "
+    "cartoon, anime, out of frame, duplicate, cropped, jpeg artifacts, "
+    "mutated hands, extra fingers, bad anatomy, worst quality"
+)
+
 LOCATION_PROMPTS = {
-    "loc_001": "a warm cozy wizarding pub interior at night, butterbeer on tables, candles floating, dark wood, magical atmosphere, Harry Potter style, detailed fantasy art, golden lighting",
-    "loc_002": "Hogwarts castle at night, Gothic architecture, moonlit towers, magical aurora, torches flickering in windows, misty Scottish highlands below, epic fantasy digital art",
-    "loc_003": "dark cobblestone alley in a wizarding city, shadowy shop windows filled with cursed objects, dim green lanterns, fog, sinister atmosphere, gothic fantasy art",
-    "loc_004": "ancient forbidden forest at night, massive dark trees, bioluminescent fungi, mist, shadows with red eyes, mysterious and dangerous, dark fantasy art",
-    "loc_005": "magical government building interior, gleaming marble floors, enchanted paper airplanes flying overhead, grand architecture, Ministry of Magic style",
-    "loc_006": "grim island prison surrounded by stormy sea, stone walls, isolated tower, dark storm clouds, Azkaban prison, dark gothic fantasy",
-    "loc_007": "haunted village at dusk, old cemetery, stone war memorial, crumbling cottage ruins, magical residue in the air, melancholy and eerie, British countryside"
+    "loc_001": f"interior of a warm magical British pub at night, floating candles, butterbeer mugs, dark oak beams, fireplace glow, cozy tavern, wizarding world, {_SD_QUALITY}",
+    "loc_002": f"Hogwarts castle exterior at midnight, Gothic stone towers, moonlit Scottish highlands, aurora in sky, torches in windows, misty valleys below, epic wide shot, {_SD_QUALITY}",
+    "loc_003": f"narrow dark cobblestone alley at night, shadowy shop windows with cursed artifacts, emerald lanterns casting eerie glow, Victorian gothic architecture, fog, sinister, {_SD_QUALITY}",
+    "loc_004": f"ancient dark forest at night, enormous ancient trees, bioluminescent mushrooms, wisps of mist, shafts of moonlight, foreboding and mysterious, eyes glowing in shadows, {_SD_QUALITY}",
+    "loc_005": f"grand magical government atrium, gleaming dark marble, gilded statues, enchanted paper airplanes flying overhead, cathedral ceiling, art-deco magical architecture, {_SD_QUALITY}",
+    "loc_006": f"grim island fortress in a stormy sea, lone lighthouse tower, crashing waves, dark storm clouds with lightning, desolate and haunted, maximum security prison on rocky island, {_SD_QUALITY}",
+    "loc_007": f"quiet British village street at twilight, stone cottage with collapsed roof, old cemetery, war memorial, autumn leaves, melancholy and ghostly, magic residue in the air, {_SD_QUALITY}",
 }
 
 ATMOSPHERE_OVERLAYS = {
@@ -89,13 +105,24 @@ def build_scene_prompt(
 async def generate_scene_image(
     prompt: str,
     location_id: str = "loc_001",
-    width: int = 768,
-    height: int = 432,
+    width: int = 512,
+    height: int = 288,
     mood: str = "mysterious",
 ) -> Dict:
     """Generate a scene image using the configured provider."""
+    if IMAGE_PROVIDER == "diffusers":
+        result = await _generate_with_diffusers(prompt, location_id, width, height)
+        # Fall back to procedural if diffusers fails
+        if result.get("type") == "error":
+            return _generate_procedural(location_id, prompt, mood, width, height) \
+                or _generate_placeholder(location_id, prompt)
+        return result
     if IMAGE_PROVIDER == "stable_diffusion":
-        return await _generate_with_sd(prompt, width, height)
+        result = await _generate_with_sd(prompt, width, height)
+        if result.get("type") == "error":
+            return _generate_procedural(location_id, prompt, mood, width, height) \
+                or _generate_placeholder(location_id, prompt)
+        return result
     if IMAGE_PROVIDER == "placeholder":
         return _generate_placeholder(location_id, prompt)
     # Default: procedural render (falls back to placeholder if Pillow is missing)
@@ -256,6 +283,127 @@ def _draw_particles(d, w, h, hy, mood, accent, rng):
         for _ in range(5):
             y = rng.randint(int(h * 0.4), h)
             d.rectangle([0, y, w, y + rng.randint(6, 16)], fill=(200, 200, 210, 22))
+
+
+# ── Diffusers (HuggingFace Stable Diffusion — no separate server needed) ─────────
+
+_diffusers_pipeline: Any = None
+_diffusers_lock = threading.Lock()
+_diffusers_error: Optional[str] = None   # set if the pipeline failed to load
+
+
+def _load_diffusers_pipeline() -> None:
+    """Load the SD pipeline once and cache it. Called from a background thread at startup."""
+    global _diffusers_pipeline, _diffusers_error
+    try:
+        import torch
+        from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        dtype  = torch.float16 if device == "cuda" else torch.float32
+
+        print(f"   [SD/diffusers] Loading {SD_MODEL_ID} on {device} …")
+        pipe = StableDiffusionPipeline.from_pretrained(
+            SD_MODEL_ID,
+            torch_dtype=dtype,
+            safety_checker=None,           # skip NSFW classifier — speeds up init
+            requires_safety_checker=False,
+        )
+        pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
+        pipe = pipe.to(device)
+        pipe.enable_attention_slicing()    # lower VRAM usage on small GPUs
+
+        if device == "cuda":
+            print(f"   [SD/diffusers] Ready on {torch.cuda.get_device_name(0)}"
+                  f" ({torch.cuda.get_device_properties(0).total_memory // 1024**2} MB VRAM)")
+        else:
+            print("   [SD/diffusers] Running on CPU — inference will be slow")
+
+        with _diffusers_lock:
+            _diffusers_pipeline = pipe
+    except Exception as exc:
+        with _diffusers_lock:
+            _diffusers_error = str(exc)
+        print(f"   [SD/diffusers] Failed to load pipeline: {exc}")
+
+
+def warmup_diffusers() -> None:
+    """Start pipeline loading in a background thread (called at server startup)."""
+    if IMAGE_PROVIDER != "diffusers":
+        return
+    t = threading.Thread(target=_load_diffusers_pipeline, daemon=True)
+    t.start()
+
+
+def _get_diffusers_pipeline():
+    """Block until the pipeline is ready, then return it. None if load failed."""
+    with _diffusers_lock:
+        if _diffusers_pipeline is not None:
+            return _diffusers_pipeline
+        if _diffusers_error is not None:
+            return None
+    # Pipeline still loading — wait (caller is in a thread-pool thread, safe to block)
+    import time
+    for _ in range(300):       # wait up to 5 minutes
+        time.sleep(1)
+        with _diffusers_lock:
+            if _diffusers_pipeline is not None:
+                return _diffusers_pipeline
+            if _diffusers_error is not None:
+                return None
+    return None
+
+
+async def _generate_with_diffusers(prompt: str, location_id: str, width: int, height: int) -> Dict:
+    """Run SD inference in a thread-pool so the async event loop stays free."""
+    import asyncio
+
+    # Round dimensions to multiples of 64 (SD requirement)
+    w = max(64, (width  // 64) * 64)
+    h = max(64, (height // 64) * 64)
+
+    def _run() -> Dict:
+        pipe = _get_diffusers_pipeline()
+        if pipe is None:
+            return {
+                "type": "error",
+                "error": _diffusers_error or "Pipeline not ready",
+                "message": "Stable Diffusion pipeline unavailable",
+                "sd_ready": False,
+            }
+
+        import torch
+        # Deterministic per location so the scene looks consistent
+        seed = int(hashlib.sha256(location_id.encode()).hexdigest()[:8], 16) % (2 ** 31)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        generator = torch.Generator(device=device).manual_seed(seed)
+
+        result = pipe(
+            prompt=prompt,
+            negative_prompt=_SD_NEG,
+            width=w,
+            height=h,
+            num_inference_steps=SD_STEPS,
+            guidance_scale=SD_CFG,
+            generator=generator,
+        )
+        image = result.images[0]
+
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        return {
+            "type": "generated",
+            "provider": "diffusers",
+            "model": SD_MODEL_ID,
+            "location_id": location_id,
+            "image_base64": f"data:image/png;base64,{b64}",
+            "prompt": prompt,
+            "sd_ready": True,
+        }
+
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _run)
 
 
 def _generate_placeholder(location_id: str, prompt: str) -> Dict:
