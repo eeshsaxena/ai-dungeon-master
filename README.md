@@ -8,37 +8,34 @@ A fully AI-powered text + image RPG set in the Wizarding World. Powered by **Oll
 
 ## ⚡ Quick Start
 
-### Prerequisites
-- Python 3.10+
-- [Ollama](https://ollama.ai/) installed and running
-- A modern web browser
+### Option A: Docker (one command, recommended)
+```bash
+docker compose up
+```
+Game runs at `http://localhost:8000` — backend + Ollama + frontend all served together.
 
-### 1. Install Ollama Model
+### Option B: Local install
+**Prerequisites:** Python 3.10+, [Ollama](https://ollama.ai/), a modern browser.
+
 ```bash
 ollama pull llama3.2
-```
-
-### 2. Install Python Dependencies
-```bash
 cd ai-dungeon-master
 pip install -r requirements.txt
+cp .env.example .env       # defaults work with Ollama + llama3.2
+cd backend && python main.py
 ```
+Then visit `http://localhost:8000`.
 
-### 3. Configure Environment
+### Option C: One-click cloud deploy
+- **Railway:** `railway.json` in repo root — push to your fork and Railway auto-detects.
+- **Fly.io:** `fly launch` (uses the bundled `fly.toml`).
+- Both deploy from the `Dockerfile` automatically.
+
+### Run tests
 ```bash
-copy .env.example .env
-# Edit .env if needed — defaults work with Ollama + llama3.2
+pip install pytest
+cd backend && pytest tests/ -v   # 85 tests, ~1s
 ```
-
-### 4. Start the Backend
-```bash
-cd backend
-python main.py
-```
-Backend runs at: `http://localhost:8000`
-
-### 5. Open the Game
-Open `frontend/index.html` in your browser, OR navigate to `http://localhost:8000`
 
 ---
 
@@ -94,6 +91,14 @@ Player Input (Text)
 | TTS Voice | Coqui GPU / pyttsx3 / ElevenLabs narration | ✅ Phase 9 |
 | Item System | 21 HP items, loot tables, use/drop effects | ✅ Phase 10 |
 | NPC Dialogue | Multi-turn structured NPC conversations | ✅ Phase 10 |
+| Random Encounters | Per-location danger profiles + night boost | ✅ Phase 11 |
+| Achievements | 30 in-game achievements, persistent | ✅ Phase 11 |
+| Day/Night Cycle | 8 phases, narrator-aware time prompts | ✅ Phase 11 |
+| Hollow Mage Boss | Scripted 3-phase final boss encounter | ✅ Phase 11 |
+| Potion Brewing | 12 recipes, level-gated success rates | ✅ Phase 11 |
+| Docker / Deploy | Multi-stage build, Railway + Fly.io configs | ✅ Phase 11 |
+| Mobile UI | Fully responsive at tablet & phone widths | ✅ Phase 11 |
+| Test Suite | 85 pytest tests across 7 modules | ✅ Phase 11 |
 
 ---
 

@@ -38,7 +38,7 @@ jobs:
       - name: Run backend tests
         run: |
           pip install pytest pytest-asyncio httpx
-          pytest backend/tests/ -v || echo "No tests yet — scaffold ready"
+          pytest backend/tests/ -v
 
       - name: Validate FastAPI routes load
         run: |
@@ -72,6 +72,27 @@ jobs:
           node --check frontend/emotion.js
           node --check frontend/knowledge_graph.js
           echo 'All JS files syntax OK'
+
+  # ── Docker Build ─────────────────────────────────────────────────────────
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: ai-dungeon-master:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   # ── Data Validation ──────────────────────────────────────────────────────
   data:
