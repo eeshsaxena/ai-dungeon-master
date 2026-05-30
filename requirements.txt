@@ -9,6 +9,10 @@ numpy>=1.26.0
 scikit-learn>=1.4.0
 aiofiles>=23.2.0
 python-multipart>=0.0.9
+Pillow>=10.0.0
+
+# ── Dev / Test ─────────────────────────────────────────────────────────────────
+pytest>=8.0.0
 
 # ── Vector DB (auto-detected; upgrades RAG + NPC memory from numpy to Chroma) ──
 # pip install chromadb   — no GPU needed; stores to backend/chroma_db/

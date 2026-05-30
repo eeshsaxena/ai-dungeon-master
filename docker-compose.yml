@@ -1,0 +1,55 @@
+version: "3.9"
+
+# One-command launch: docker compose up
+# Spins up the AI Dungeon Master backend + serves the frontend at http://localhost:8000
+# Add Ollama as a service if you want a fully self-contained LLM stack.
+
+services:
+  ai-dungeon-master:
+    build: .
+    image: ai-dungeon-master:latest
+    container_name: ai-dungeon-master
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
+      IMAGE_PROVIDER: ${IMAGE_PROVIDER:-procedural}
+      TTS_PROVIDER: ${TTS_PROVIDER:-disabled}
+      VECTOR_BACKEND: ${VECTOR_BACKEND:-numpy}
+      DEBUG: "false"
+    volumes:
+      # Persist all runtime state across container restarts
+      - dungeon-saves:/app/backend/saves
+      - dungeon-world-state:/app/backend/world_state
+      - dungeon-achievements:/app/backend/achievements_data
+      - dungeon-npc-memory:/app/backend/npc_memory_store
+      - dungeon-rl-data:/app/backend/rl_data
+    depends_on:
+      ollama:
+        condition: service_started
+        required: false
+
+  # Optional: bundled Ollama for fully self-contained local LLM
+  # Comment this out if you have Ollama running on the host.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai-dungeon-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    # Pull the default model on first start
+    entrypoint: >
+      sh -c "ollama serve & sleep 5 && ollama pull llama3.2 && wait"
+
+volumes:
+  dungeon-saves:
+  dungeon-world-state:
+  dungeon-achievements:
+  dungeon-npc-memory:
+  dungeon-rl-data:
+  ollama-models:
