@@ -74,6 +74,58 @@
       <span class="btn-icon">🪄</span>
       Begin Adventure
     </button>
+
+    <div class="char-creation-divider">
+      <span>or</span>
+    </div>
+
+    <button class="btn-secondary load-btn" id="load-game-btn">
+      <span class="btn-icon">💾</span>
+      Load Saved Game
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SAVE LIST MODAL -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="save-list-modal" class="modal-overlay hidden">
+  <div class="modal-box save-list-box">
+    <div class="modal-rune-border"></div>
+    <h2 class="modal-title">💾 Saved Adventures</h2>
+    <p class="modal-subtitle">Choose a save to continue your journey</p>
+    <div class="save-list" id="save-list-items">
+      <p class="saves-empty">No saves found...</p>
+    </div>
+    <button class="btn-secondary" id="close-save-list-btn" style="margin-top:12px;width:100%">✖ Cancel</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- QUEST DISCOVERY TOAST -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="quest-discovery-toast" class="quest-discovery-toast hidden">
+  <div class="quest-toast-inner">
+    <div class="quest-toast-icon">📜</div>
+    <div class="quest-toast-text">
+      <div class="quest-toast-label">✨ New Quest Discovered</div>
+      <div class="quest-toast-title" id="quest-toast-title"></div>
+      <div class="quest-toast-diff" id="quest-toast-diff"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- LEVEL-UP TOAST -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="levelup-toast" class="levelup-toast hidden">
+  <div class="levelup-inner">
+    <div class="levelup-burst">✨</div>
+    <div class="levelup-text">
+      <div class="levelup-title" id="levelup-title">Level Up!</div>
+      <div class="levelup-subtitle" id="levelup-subtitle">You reached Level 2</div>
+    </div>
+    <div class="levelup-spells" id="levelup-spells"></div>
   </div>
 </div>
 
@@ -223,6 +275,11 @@
         <div class="scene-image-container" id="scene-image-container">
           <canvas class="scene-canvas" id="scene-canvas"></canvas>
           <img class="scene-image" id="scene-image" alt="" />
+          <!-- SD generation status overlay -->
+          <div class="sd-generating-overlay hidden" id="sd-generating-overlay">
+            <div class="sd-spinner"></div>
+            <span id="sd-generating-text">Generating scene art...</span>
+          </div>
           <div class="scene-overlay">
             <div class="scene-location-tag" id="scene-location-tag">The Three Broomsticks</div>
             <div class="scene-atmosphere-tag" id="scene-atmosphere-tag">✨ Warm</div>
@@ -357,12 +414,60 @@
       </div>
     </div>
     <div class="bottom-right">
+      <!-- Voice controls -->
+      <div class="voice-controls" id="voice-controls">
+        <button class="footer-btn voice-toggle" id="voice-toggle" title="Toggle DM Voice">🔇 Voice</button>
+        <input type="range" id="voice-volume" class="voice-slider" min="0" max="100" value="80" title="Volume" />
+      </div>
       <button class="footer-btn" id="save-btn">💾 Save</button>
       <button class="footer-btn" id="history-btn">📚 History</button>
       <button class="footer-btn danger" id="quit-btn">✖ Quit</button>
     </div>
   </footer>
 
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- NPC DIALOGUE MODAL -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="dialogue-modal" class="modal-overlay hidden" style="z-index:1500">
+  <div class="modal-box dialogue-box">
+    <div class="modal-rune-border"></div>
+    <div class="dialogue-header">
+      <div class="dialogue-npc-avatar" id="dialogue-avatar">🧙</div>
+      <div>
+        <h2 class="dialogue-npc-name" id="dialogue-npc-name">Professor Longbottom</h2>
+        <div class="dialogue-mood-badge" id="dialogue-mood">😐 neutral</div>
+      </div>
+      <button class="icon-btn" id="dialogue-close-btn" title="End conversation">✖</button>
+    </div>
+
+    <div class="dialogue-scroll" id="dialogue-scroll">
+      <!-- Filled by JS -->
+    </div>
+
+    <div class="dialogue-topics" id="dialogue-topics">
+      <!-- Topic buttons filled by JS -->
+    </div>
+
+    <div class="dialogue-input-row">
+      <input type="text" id="dialogue-custom-input" class="form-input" placeholder="Or type your own response..." maxlength="200" />
+      <button class="send-btn" id="dialogue-send-btn">⚡</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- ITEM USE NOTIFICATION -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="item-use-toast" class="item-use-toast hidden">
+  <div class="item-toast-inner">
+    <span id="item-toast-emoji">🧪</span>
+    <div>
+      <div class="item-toast-name" id="item-toast-name">Healing Potion</div>
+      <div class="item-toast-effect" id="item-toast-effect">Restored 50 HP</div>
+    </div>
+  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════ -->

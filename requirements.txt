@@ -9,3 +9,28 @@ numpy>=1.26.0
 scikit-learn>=1.4.0
 aiofiles>=23.2.0
 python-multipart>=0.0.9
+
+# ── Vector DB (auto-detected; upgrades RAG + NPC memory from numpy to Chroma) ──
+# pip install chromadb   — no GPU needed; stores to backend/chroma_db/
+chromadb>=0.5.0
+
+# ── TTS Voice Narration (TTS_PROVIDER=coqui|pyttsx3|elevenlabs) ───────────────
+# coqui (GPU, high quality):  pip install TTS soundfile
+# pyttsx3 (CPU, OS TTS):      pip install pyttsx3
+# All other TTS needs are met by httpx (already a dependency)
+
+# ── LoRA fine-tuning (LLM_PROVIDER=lora) ──────────────────────────────────────
+# Install torch with CUDA first (see Stable Diffusion note below), then:
+peft>=0.11.0
+trl>=0.9.0
+bitsandbytes>=0.43.0
+datasets>=2.19.0
+
+# ── Stable Diffusion (IMAGE_PROVIDER=diffusers) ────────────────────────────────
+# Install PyTorch FIRST (CUDA) — pick the right CUDA version for your driver:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+# Then install these:
+diffusers>=0.27.0
+transformers>=4.40.0
+accelerate>=0.30.0
+safetensors>=0.4.3

@@ -35,6 +35,8 @@ class PlayerStats(BaseModel):
     house: PlayerHouse = PlayerHouse.UNSELECTED
     level: int = 1
     xp: int = 0
+    xp_to_next: int = 300  # XP needed to reach next level
+    title: str = "First-Year"  # Wizard title for current level
     hp: int = 100
     max_hp: int = 100
     mana: int = 80
@@ -53,6 +55,7 @@ class PlayerStats(BaseModel):
     current_location: str = "loc_001"
     emotion_state: EmotionState = EmotionState.NEUTRAL
     turns_played: int = 0
+    active_effects: List[Dict[str, Any]] = Field(default_factory=list)  # timed buffs/debuffs
 
 
 class NarrateRequest(BaseModel):
@@ -71,6 +74,7 @@ class NarrateResponse(BaseModel):
     scene_prompt: str  # Prompt for image generation
     detected_emotion: EmotionState = EmotionState.NEUTRAL
     difficulty_adjustment: Optional[str] = None
+    new_quest: Optional[Dict[str, Any]] = None  # dynamically generated quest, if any
 
 
 class CombatAction(str, Enum):
@@ -128,6 +132,12 @@ class CombatResponse(BaseModel):
     player_won: Optional[bool] = None
     loot: List[Dict[str, Any]] = Field(default_factory=list)
     xp_gained: int = 0
+    # Level-up info — populated when the player levels up this combat
+    level_up: bool = False
+    new_level: Optional[int] = None
+    new_title: Optional[str] = None
+    new_spells: List[str] = Field(default_factory=list)
+    updated_player: Optional[Dict] = None  # full updated player stats if level_up
 
 
 class EmotionRequest(BaseModel):

@@ -36,11 +36,22 @@ from knowledge_graph import world_graph
 from combat_ai import enemy_ai
 from emotion import emotion_classifier
 from memory import memory_manager
-from image_gen import generate_scene_image, build_scene_prompt
+from image_gen import generate_scene_image, build_scene_prompt, warmup_diffusers
+import image_gen as _image_gen
 from rag import lore_retriever
 from rl_agent import rl_agent
 from rl_train import simulate as rl_simulate
 from npc_memory import npc_memory_store
+from save_manager import save_manager
+from progression import process_xp_gain, xp_to_next, title_for_level, spells_for_level
+from quest_generator import quest_generator, QuestContext
+from world_state_store import get_world_state, drop_world_state
+from tts_engine import synthesize as tts_synthesize, tts_status, warmup_coqui
+from item_system import (
+    ITEM_DB, get_item, make_item_instance, use_item, roll_loot,
+    inventory_to_display, item_summary, tick_effects
+)
+from dialogue_engine import dialogue_engine, DialogueContext
 
 # ── App Setup ──────────────────────────────────────────────────────────────────
 
@@ -185,18 +196,49 @@ async def narrate(request: NarrateRequest) -> NarrateResponse:
             npc["id"], f"The player {request.player_input}", request.session_id
         )
 
-    # Apply world state updates
+    # Apply world state updates + persist location visits
+    ws = get_world_state(request.session_id)
+    ws.visit_location(request.current_location)
     updates = response.world_state_updates
     if "new_location" in updates:
-        world_graph.update_player_location(updates["new_location"])
-        session.player.current_location = updates["new_location"]
-        memory.add_world_change(f"Player moved to {updates['new_location']}")
+        new_loc = updates["new_location"]
+        world_graph.update_player_location(new_loc)
+        session.player.current_location = new_loc
+        memory.add_world_change(f"Player moved to {new_loc}")
+        first_visit = ws.visit_location(new_loc)
+        if first_visit:
+            ws.add_event(f"First visited {new_loc}")
 
     # Update session
     session.player.turns_played += 1
     session.player.emotion_state = emotion
     session.story_history.append({"role": "user", "content": request.player_input})
     session.story_history.append({"role": "assistant", "content": response.narrative})
+
+    # Auto-save every 5 turns
+    if session.player.turns_played % 5 == 0:
+        _auto_save(request.session_id, session)
+
+    # Dynamic quest generation — check conditions and generate if warranted
+    all_quest_titles = [q.get("title", "") for q in world_graph.get_active_quests() + world_graph.get_available_quests()]
+    all_quest_titles += [q["title"] for q in quest_generator.get_quests(request.session_id)]
+    ctx = QuestContext(
+        session_id=request.session_id,
+        player_name=session.player.name,
+        player_level=session.player.level,
+        player_house=str(session.player.house),
+        player_reputation=dict(session.player.reputation),
+        location_id=request.current_location,
+        location_name=(world_graph.get_location_info(request.current_location) or {}).get("label", request.current_location),
+        npcs_here=[n.get("label", n["id"]) for n in npcs_here],
+        key_beats=memory.key_beats[-8:],
+        existing_quest_titles=all_quest_titles,
+        turn_number=session.player.turns_played,
+    )
+    if quest_generator.should_generate(ctx):
+        new_quest = await quest_generator.generate(ctx)
+        if new_quest:
+            response.new_quest = new_quest
 
     # Add hint if triggered
     if hint:
@@ -208,28 +250,351 @@ async def narrate(request: NarrateRequest) -> NarrateResponse:
     return response
 
 
+def _auto_save(session_id: str, session) -> None:
+    """Background auto-save (player + memory + world state) — never raises."""
+    try:
+        mem = memory_manager.get(session_id)
+        memory_data = mem.to_dict() if mem else {}
+        ws  = get_world_state(session_id)
+        player_dict = session.player.model_dump()
+        player_dict["_world_state"] = ws.to_dict()   # bundle into the save
+        save_manager.save(session_id, player_dict, memory_data)
+    except Exception:
+        pass
+
+
 @app.post("/api/combat")
 async def resolve_combat(request: CombatRequest) -> CombatResponse:
     """Resolve a combat round using the enemy AI."""
     session = get_or_create_session(request.session_id)
 
     result = enemy_ai.resolve_combat_round(request)
-
-    # Update session player HP
     session.player.hp = result.player_hp_remaining
 
     if result.combat_over:
+        memory = memory_manager.get_or_create(request.session_id)
         if result.player_won:
-            session.player.xp += result.xp_gained
-            memory = memory_manager.get_or_create(request.session_id)
+            # Server-authoritative XP + level-up
+            old_xp = request.player_stats.xp
+            old_level = request.player_stats.level
+            new_xp, new_level, new_spells, leveled_up = process_xp_gain(old_xp, result.xp_gained)
+
+            session.player.xp = new_xp
+            session.player.level = new_level
+            session.player.xp_to_next = xp_to_next(new_xp, new_level)
+            session.player.title = title_for_level(new_level)
+
+            if leveled_up:
+                levels_gained = new_level - old_level
+                session.player.max_hp = request.player_stats.max_hp + levels_gained * 10
+                session.player.hp = session.player.max_hp
+                session.player.max_mana = request.player_stats.max_mana + levels_gained * 5
+                session.player.mana = session.player.max_mana
+                for spell in new_spells:
+                    if spell not in session.player.spells_known:
+                        session.player.spells_known.append(spell)
+                result.level_up = True
+                result.new_level = new_level
+                result.new_title = session.player.title
+                result.new_spells = new_spells
+                result.updated_player = session.player.model_dump()
+                memory.add_key_beat(
+                    f"Leveled up to {new_level} ({session.player.title})!"
+                    + (f" Unlocked: {', '.join(new_spells)}" if new_spells else "")
+                )
+
+            # Roll loot from item system
+            loot_items = roll_loot(request.enemy.archetype, session.player.level)
+            if loot_items:
+                session.player.inventory.extend(loot_items)
+                loot_names = [i["name"] for i in loot_items]
+                result.loot = loot_items
+                memory.add_key_beat(f"Found: {', '.join(loot_names)}")
+
             memory.add_key_beat(f"Defeated {request.enemy.name}! Gained {result.xp_gained} XP")
         else:
-            # Player lost combat — reduce HP to 10 (no permadeath in Phase 1)
             session.player.hp = 10
-            memory = memory_manager.get_or_create(request.session_id)
             memory.add_key_beat(f"Defeated by {request.enemy.name}. Barely escaped.")
 
     return result
+
+
+# ── Inventory / Item System ────────────────────────────────────────────────────
+
+@app.get("/api/items")
+async def list_all_items():
+    """Return the full item database for the frontend."""
+    return {"items": ITEM_DB}
+
+
+@app.get("/api/inventory/{session_id}")
+async def get_inventory(session_id: str):
+    """Get the current player inventory with enriched item data."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"inventory": inventory_to_display(session.player.inventory)}
+
+
+@app.post("/api/inventory/{session_id}/use/{item_id}")
+async def use_item_endpoint(session_id: str, item_id: str):
+    """Use an item from the player's inventory. Applies effects immediately."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Find item in inventory
+    inv = session.player.inventory
+    idx = next((i for i, it in enumerate(inv) if it.get("id") == item_id), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail=f"Item '{item_id}' not in inventory")
+
+    item = inv[idx]
+    player_dict = session.player.model_dump()
+    active_effects = player_dict.get("active_effects", [])
+    mem = memory_manager.get_or_create(session_id)
+    result = use_item(item, player_dict, active_effects, mem.key_beats)
+
+    # Consume the item (remove from inventory) unless it's an artifact/key
+    if item.get("type") not in ("artifact", "key") or not item.get("effects"):
+        inv.pop(idx)
+    elif item.get("type") == "artifact":
+        # Artifacts are consumed after single use
+        inv.pop(idx)
+
+    # Apply updated stats back to session
+    from models.schemas import PlayerStats
+    updated = PlayerStats(**player_dict)
+    session.player = updated
+
+    mem.add_key_beat(f"Used {item['name']}: {result['message']}")
+    return result
+
+
+@app.post("/api/inventory/{session_id}/drop/{item_id}")
+async def drop_item_endpoint(session_id: str, item_id: str):
+    """Remove an item from inventory without using it."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    inv = session.player.inventory
+    idx = next((i for i, it in enumerate(inv) if it.get("id") == item_id), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    dropped = inv.pop(idx)
+    return {"dropped": True, "item": dropped}
+
+
+@app.post("/api/inventory/{session_id}/give")
+async def give_item_endpoint(session_id: str, item_id: str):
+    """Give the player an item (for testing / quest rewards)."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    inst = make_item_instance(item_id)
+    if not inst:
+        raise HTTPException(status_code=404, detail=f"Unknown item: {item_id}")
+    session.player.inventory.append(inst)
+    return {"given": True, "item": inst}
+
+
+# ── NPC Dialogue ───────────────────────────────────────────────────────────────
+
+def _build_dialogue_ctx(session_id: str, npc_id: str, npc_name: str) -> DialogueContext:
+    session = get_or_create_session(session_id)
+    mem     = memory_manager.get_or_create(session_id)
+    npcs_h  = world_graph.get_npcs_at_location(session.player.current_location)
+    memories = npc_memory_store.recall(npc_id, "", top_k=5)
+    mem_texts = [m.get("text", "") for m in memories if m.get("text")]
+    all_titles = [q.get("title", "") for q in world_graph.get_active_quests() + world_graph.get_available_quests()]
+
+    return DialogueContext(
+        session_id=session_id,
+        npc_id=npc_id,
+        npc_name=npc_name,
+        player_name=session.player.name,
+        player_level=session.player.level,
+        player_house=str(session.player.house),
+        player_reputation=dict(session.player.reputation),
+        location_name=(world_graph.get_location_info(session.player.current_location) or {}).get("label", session.player.current_location),
+        npc_memories=mem_texts,
+        active_quest_titles=all_titles,
+        key_beats=mem.key_beats[-6:],
+    )
+
+
+@app.post("/api/dialogue/start")
+async def start_dialogue(session_id: str, npc_id: str):
+    """Begin a conversation with an NPC."""
+    node = world_graph.graph.nodes.get(npc_id, {})
+    npc_name = node.get("label", npc_id)
+    ctx = _build_dialogue_ctx(session_id, npc_id, npc_name)
+    result = await dialogue_engine.start(ctx)
+
+    # Record in NPC memory
+    npc_memory_store.record(npc_id, f"The player started a conversation", session_id)
+    return result
+
+
+@app.post("/api/dialogue/reply")
+async def dialogue_reply(session_id: str, npc_id: str, player_says: str):
+    """Player says something in an ongoing conversation."""
+    node = world_graph.graph.nodes.get(npc_id, {})
+    npc_name = node.get("label", npc_id)
+    ctx = _build_dialogue_ctx(session_id, npc_id, npc_name)
+    result = await dialogue_engine.reply(session_id, npc_id, player_says, ctx)
+
+    # Apply reputation changes from this dialogue turn
+    if result.get("reputation_change"):
+        session = get_or_create_session(session_id)
+        ws = get_world_state(session_id)
+        for faction, delta in result["reputation_change"].items():
+            ws.adjust_reputation(faction, delta)
+            if faction in session.player.reputation:
+                session.player.reputation[faction] += delta
+
+    # If NPC offered an item, give it to the player
+    if result.get("item_offered"):
+        session = get_or_create_session(session_id)
+        inst = make_item_instance(result["item_offered"])
+        if inst and len(session.player.inventory) < 20:
+            session.player.inventory.append(inst)
+            result["item_given"] = inst
+
+    # Record what the player said
+    npc_memory_store.record(npc_id, f"The player said: {player_says[:100]}", session_id)
+    return result
+
+
+@app.get("/api/dialogue/{session_id}/{npc_id}")
+async def get_dialogue_history(session_id: str, npc_id: str):
+    """Get conversation history with an NPC."""
+    return {"history": dialogue_engine.get_history(session_id, npc_id)}
+
+
+@app.post("/api/dialogue/end")
+async def end_dialogue(session_id: str, npc_id: str):
+    """End the current conversation."""
+    dialogue_engine.end_conversation(session_id, npc_id)
+    return {"ended": True, "summary": dialogue_engine.summary(session_id)}
+
+
+# ── Dynamic Quests ─────────────────────────────────────────────────────────────
+
+@app.post("/api/generate-quest")
+async def generate_quest_endpoint(
+    session_id: str,
+    location_id: str = "loc_001",
+    force: bool = False,
+):
+    """Manually trigger a dynamic quest generation for the current location."""
+    session = get_or_create_session(session_id)
+    memory  = memory_manager.get_or_create(session_id)
+    npcs    = world_graph.get_npcs_at_location(location_id)
+    all_titles = [q.get("title", "") for q in world_graph.get_active_quests() + world_graph.get_available_quests()]
+    all_titles += [q["title"] for q in quest_generator.get_quests(session_id)]
+
+    ctx = QuestContext(
+        session_id=session_id,
+        player_name=session.player.name,
+        player_level=session.player.level,
+        player_house=str(session.player.house),
+        player_reputation=dict(session.player.reputation),
+        location_id=location_id,
+        location_name=(world_graph.get_location_info(location_id) or {}).get("label", location_id),
+        npcs_here=[n.get("label", n["id"]) for n in npcs],
+        key_beats=memory.key_beats[-8:],
+        existing_quest_titles=all_titles,
+        turn_number=session.player.turns_played,
+    )
+    if not force and not quest_generator.should_generate(ctx):
+        return {"generated": False, "reason": "cooldown or max active quests reached"}
+
+    quest = await quest_generator.generate(ctx)
+    return {"generated": quest is not None, "quest": quest}
+
+
+@app.get("/api/dynamic-quests/{session_id}")
+async def list_dynamic_quests(session_id: str):
+    """Return all generated quests for a session."""
+    return {"quests": quest_generator.get_quests(session_id)}
+
+
+# ── Save / Load ────────────────────────────────────────────────────────────────
+
+@app.post("/api/save/{session_id}")
+async def save_game(session_id: str):
+    """Manually save the current session to disk."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    mem = memory_manager.get(session_id)
+    memory_data = mem.to_dict() if mem else {}
+    filename = save_manager.save(session_id, session.player.model_dump(), memory_data)
+    return {"saved": True, "filename": filename, "player": session.player.model_dump()}
+
+
+@app.get("/api/saves")
+async def list_saves():
+    """List all save files, newest first."""
+    return {"saves": save_manager.list_saves(), **save_manager.stats()}
+
+
+@app.post("/api/load")
+async def load_game(filename: str):
+    """
+    Load a save file and reconstitute a live session.
+    Returns a new session_id and the restored player stats.
+    """
+    data = save_manager.load(filename)
+    if not data:
+        raise HTTPException(status_code=404, detail=f"Save file '{filename}' not found")
+
+    from models.schemas import PlayerStats as PS
+    player = PS(**data["player"])
+    # Recompute progression fields in case the save predates Phase 5
+    player.xp_to_next = xp_to_next(player.xp, player.level)
+    player.title = title_for_level(player.level)
+    # Make sure all spells for current level are known
+    for spell in spells_for_level(player.level):
+        if spell not in player.spells_known:
+            player.spells_known.append(spell)
+
+    new_sid = str(uuid.uuid4())
+    sessions[new_sid] = SessionState(session_id=new_sid, player=player)
+
+    # Restore story memory key beats so the narrator has context
+    mem = memory_manager.get_or_create(new_sid)
+    saved_mem = data.get("memory", {})
+    if saved_mem.get("compressed_summary"):
+        mem.compressed_summary = saved_mem["compressed_summary"]
+    for beat in saved_mem.get("key_beats", []):
+        mem.add_key_beat(beat)
+    for change in saved_mem.get("world_changes", []):
+        mem.add_world_change(change)
+
+    # Restore world state (quest statuses, visited locations, flags)
+    saved_ws = data["player"].get("_world_state")
+    if saved_ws:
+        ws = get_world_state(new_sid)
+        ws.from_dict(saved_ws)
+        ws.session_id = new_sid   # restamp with new session id
+
+    return {
+        "session_id": new_sid,
+        "player": player.model_dump(),
+        "loaded_from": filename,
+        "world_state": get_world_state(new_sid).summary(),
+    }
+
+
+@app.delete("/api/save/{filename}")
+async def delete_save(filename: str):
+    """Delete a save file."""
+    deleted = save_manager.delete(filename)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Save file not found")
+    return {"deleted": True, "filename": filename}
 
 
 @app.get("/api/rl-stats")
@@ -323,6 +688,54 @@ async def get_location(location_id: str):
         raise HTTPException(status_code=404, detail="Location not found")
     npcs = world_graph.get_npcs_at_location(location_id)
     return {"location": info, "npcs": npcs}
+
+
+@app.get("/api/sd-status")
+async def sd_status():
+    """Report whether the Stable Diffusion pipeline is loaded and ready."""
+    provider = os.getenv("IMAGE_PROVIDER", "procedural")
+    if provider != "diffusers":
+        return {"provider": provider, "ready": provider == "procedural", "model": None}
+    ready = _image_gen._diffusers_pipeline is not None
+    error = _image_gen._diffusers_error
+    return {
+        "provider": "diffusers",
+        "ready": ready,
+        "loading": not ready and not error,
+        "error": error,
+        "model": _image_gen.SD_MODEL_ID,
+    }
+
+
+@app.post("/api/tts")
+async def text_to_speech(text: str, session_id: str = ""):
+    """Convert DM narrative text to speech. Returns base64 audio data URI or null."""
+    audio = await tts_synthesize(text)
+    return {"audio": audio, "provider": os.getenv("TTS_PROVIDER", "disabled")}
+
+
+@app.get("/api/tts-status")
+async def get_tts_status():
+    """Report TTS provider readiness."""
+    return tts_status()
+
+
+@app.get("/api/world-state-store/{session_id}")
+async def get_world_state_store(session_id: str):
+    """Return the persistent world state delta for a session."""
+    ws = get_world_state(session_id)
+    return ws.summary()
+
+
+@app.post("/api/world-state-store/{session_id}/quest")
+async def update_quest_status(session_id: str, quest_id: str, status: str):
+    """Mark a quest active/completed/failed."""
+    ws = get_world_state(session_id)
+    ws.set_quest_status(quest_id, status)
+    if status == "completed":
+        memory = memory_manager.get_or_create(session_id)
+        memory.add_key_beat(f"Completed quest: {quest_id}")
+    return {"updated": True, "quest_id": quest_id, "status": status}
 
 
 @app.post("/api/generate-scene")
@@ -479,6 +892,22 @@ async def startup():
     rls = rl_agent.stats()
     print(f"   RL Enemy AI: {'on' if os.getenv('ENEMY_AI', 'rl').lower() == 'rl' else 'off'} "
           f"| {rls['episodes']} episodes, {rls['total_states']} states learned")
+    ss = save_manager.stats()
+    print(f"   Save System: {ss['save_count']} saves on disk ({ss['save_dir']})")
+    # Pre-warm SD pipeline in background (no-op if IMAGE_PROVIDER != "diffusers")
+    warmup_diffusers()
+    # Pre-warm LoRA model in background (no-op if LLM_PROVIDER != "lora")
+    if os.getenv("LLM_PROVIDER") == "lora":
+        try:
+            from lora_train.infer import warmup_lora
+            warmup_lora()
+            print("   LoRA: loading adapter in background…")
+        except ImportError:
+            print("   LoRA: peft/transformers not installed — run: pip install peft trl bitsandbytes")
+    # Pre-warm Coqui TTS in background (no-op if TTS_PROVIDER != "coqui"/"auto")
+    warmup_coqui()
+    ts = tts_status()
+    print(f"   TTS: {ts['provider']}" + (" (loading…)" if ts.get("loading") else " (ready)" if ts.get("ready") else " (disabled)"))
     print("   Ready!")
 
 

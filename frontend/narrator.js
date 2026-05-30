@@ -146,6 +146,109 @@ const Narrator = (() => {
     return await r.json();
   }
 
+  // ── Inventory ────────────────────────────────────────────────────────────
+
+  async function getInventory(sessionId) {
+    const r = await fetch(`${API_BASE}/api/inventory/${sessionId}`);
+    return await r.json();
+  }
+
+  async function useItem(sessionId, itemId) {
+    const r = await fetch(`${API_BASE}/api/inventory/${sessionId}/use/${itemId}`, { method: 'POST' });
+    if (!r.ok) throw new Error(`Use item failed: ${r.status}`);
+    return await r.json();
+  }
+
+  async function dropItem(sessionId, itemId) {
+    const r = await fetch(`${API_BASE}/api/inventory/${sessionId}/drop/${itemId}`, { method: 'POST' });
+    return await r.json();
+  }
+
+  async function getAllItems() {
+    const r = await fetch(`${API_BASE}/api/items`);
+    return await r.json();
+  }
+
+  // ── NPC Dialogue ─────────────────────────────────────────────────────────
+
+  async function startDialogue(sessionId, npcId) {
+    const params = new URLSearchParams({ session_id: sessionId, npc_id: npcId });
+    const r = await fetch(`${API_BASE}/api/dialogue/start?${params}`, { method: 'POST' });
+    if (!r.ok) throw new Error(`Dialogue start failed: ${r.status}`);
+    return await r.json();
+  }
+
+  async function replyDialogue(sessionId, npcId, playerSays) {
+    const params = new URLSearchParams({ session_id: sessionId, npc_id: npcId, player_says: playerSays });
+    const r = await fetch(`${API_BASE}/api/dialogue/reply?${params}`, { method: 'POST' });
+    if (!r.ok) throw new Error(`Dialogue reply failed: ${r.status}`);
+    return await r.json();
+  }
+
+  async function endDialogue(sessionId, npcId) {
+    const params = new URLSearchParams({ session_id: sessionId, npc_id: npcId });
+    const r = await fetch(`${API_BASE}/api/dialogue/end?${params}`, { method: 'POST' });
+    return await r.json();
+  }
+
+  // ── TTS Voice ────────────────────────────────────────────────────────────
+
+  async function textToSpeech(text, sessionId = '') {
+    const params = new URLSearchParams({ text, session_id: sessionId });
+    const r = await fetch(`${API_BASE}/api/tts?${params}`, { method: 'POST' });
+    if (!r.ok) return null;
+    const data = await r.json();
+    return data.audio || null;
+  }
+
+  async function getTtsStatus() {
+    try {
+      const r = await fetch(`${API_BASE}/api/tts-status`);
+      return await r.json();
+    } catch { return { provider: 'disabled', ready: false }; }
+  }
+
+  // ── Save / Load ─────────────────────────────────────────────────────────
+
+  // ── Dynamic Quests ───────────────────────────────────────────────────────
+
+  async function generateQuest(sessionId, locationId, force = false) {
+    const params = new URLSearchParams({ session_id: sessionId, location_id: locationId, force });
+    const r = await fetch(`${API_BASE}/api/generate-quest?${params}`, { method: 'POST' });
+    if (!r.ok) throw new Error(`Quest gen failed: ${r.status}`);
+    return await r.json();
+  }
+
+  async function getDynamicQuests(sessionId) {
+    const r = await fetch(`${API_BASE}/api/dynamic-quests/${sessionId}`);
+    return await r.json();
+  }
+
+  async function saveGame(sessionId) {
+    const r = await fetch(`${API_BASE}/api/save/${sessionId}`, { method: 'POST' });
+    if (!r.ok) throw new Error(`Save failed: ${r.status}`);
+    return await r.json();
+  }
+
+  async function listSaves() {
+    const r = await fetch(`${API_BASE}/api/saves`);
+    if (!r.ok) throw new Error(`List saves failed: ${r.status}`);
+    return await r.json();
+  }
+
+  async function loadGame(filename) {
+    const params = new URLSearchParams({ filename });
+    const r = await fetch(`${API_BASE}/api/load?${params}`, { method: 'POST' });
+    if (!r.ok) throw new Error(`Load failed: ${r.status}`);
+    return await r.json();
+  }
+
+  async function deleteSave(filename) {
+    const r = await fetch(`${API_BASE}/api/save/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(`Delete failed: ${r.status}`);
+    return await r.json();
+  }
+
   async function classifyEmotion(sessionId, recentInputs, turnsWithoutProgress = 0) {
     const body = {
       session_id: sessionId,
@@ -217,6 +320,21 @@ Behind the bar, Madam Rosmerta polishes a glass and watches your exchange with e
     getQuests,
     generateScene,
     classifyEmotion,
+    getInventory,
+    useItem,
+    dropItem,
+    getAllItems,
+    startDialogue,
+    replyDialogue,
+    endDialogue,
+    textToSpeech,
+    getTtsStatus,
+    generateQuest,
+    getDynamicQuests,
+    saveGame,
+    listSaves,
+    loadGame,
+    deleteSave,
     getMockResponse,
     MOCK_OPENING,
     get isConnected() { return wsConnected; }

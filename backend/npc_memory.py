@@ -1,24 +1,18 @@
 """
-Long-term NPC memory for the AI Dungeon Master (Phase 2.5).
+Long-term NPC memory for the AI Dungeon Master (Phase 2.5 / Phase 6 upgrade).
 
-Phase 1 memory (memory.py) is per-session story history. This adds a layer that
-persists *per NPC across sessions*: each character remembers what the player did
-in their presence, so when you return to the Three Broomsticks weeks later,
-Madam Rosmerta can reference that time you smashed up Knockturn Alley.
+Each NPC accumulates memories of what the player did in their presence, persisted
+across sessions. Recall is semantic — the most relevant past memories are surfaced
+when the player interacts near an NPC.
 
-Recall is semantic — when the player interacts near an NPC, we surface that
-NPC's most relevant past memories (via shared embeddings from rag.py), falling
-back to plain recency when the embedding model is unavailable.
+Storage:
+  - npc_memories.json — human-readable memory text per NPC (always written)
+  - VectorStore("npc_memory") — embeddings backed by Chroma (persistent, no
+    manual .npz management) or numpy (auto-fallback when chromadb is not installed)
 
-Persistence has two layers, both on disk:
-  - npc_memories.json   — human-readable memory text per NPC
-  - npc_vectors.npz     — the embedding for each memory, so recall does NOT
-                          recompute every vector on startup. A per-NPC content
-                          hash (in npc_vectors.meta.json) rebuilds only the NPCs
-                          whose memories actually changed, and a model-name guard
-                          invalidates the whole cache if the embedding model
-                          changes. This is the project's lightweight, dependency
-                          -free persistent vector store (Chroma/FAISS optional later).
+The Phase 2.5 .npz vector cache is superseded by VectorStore. Existing data in
+npc_memory_store/npc_memories.json is loaded as before; the vector index is
+rebuilt from it on first startup then kept hot by VectorStore.
 """
 import json
 import time
@@ -26,62 +20,68 @@ import hashlib
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-import numpy as np
+from vector_store import VectorStore, embed as vs_embed, EMBED_MODEL
 
-from rag import lore_retriever
-
-STORE_DIR = Path(__file__).parent / "npc_memory_store"
+STORE_DIR  = Path(__file__).parent / "npc_memory_store"
 STORE_PATH = STORE_DIR / "npc_memories.json"
-VEC_PATH = STORE_DIR / "npc_vectors.npz"
-VEC_META_PATH = STORE_DIR / "npc_vectors.meta.json"
 
 MAX_MEMORIES_PER_NPC = 50
 
 
-def _texts_hash(texts: List[str]) -> str:
-    """Stable hash of an NPC's memory texts — changes iff the memories change."""
-    h = hashlib.sha256()
-    for t in texts:
-        h.update(t.encode("utf-8"))
-        h.update(b"\x00")
-    return h.hexdigest()[:16]
-
-
 class NPCMemoryStore:
-    """Per-NPC long-term memory with semantic recall."""
+    """Per-NPC long-term memory with semantic recall, backed by VectorStore."""
 
     def __init__(self, persist: bool = True):
         self.persist = persist
-        # npc_id -> list of memory dicts {text, ts, session_id}
+        # npc_id -> list of {text, ts, session_id}
         self.memories: Dict[str, List[Dict[str, Any]]] = {}
-        # npc_id -> np.ndarray of embeddings aligned with self.memories[npc_id]
-        self._vectors: Dict[str, Optional[np.ndarray]] = {}
-        # npc_id -> hash of the texts the cached vectors were built from
-        self._vec_hashes: Dict[str, str] = {}
-        if self.persist:
+        self._store: Optional[VectorStore] = None
+        if persist:
             self._load()
-            self._load_vectors()
+        self._store = VectorStore("npc_memory", model_name=EMBED_MODEL)
+        # Seed the vector store with persisted memories
+        self._rebuild_index()
 
-    # -- writing --------------------------------------------------------------
+    # ── writing ───────────────────────────────────────────────────────────────
 
     def record(self, npc_id: str, text: str, session_id: str = "") -> None:
-        """Store a memory for an NPC (something the player did in their presence)."""
+        """Store a new memory for an NPC and update the vector index."""
         if not npc_id or not text or not text.strip():
             return
         bucket = self.memories.setdefault(npc_id, [])
         bucket.append({"text": text.strip(), "ts": time.time(), "session_id": session_id})
 
-        # Cap per-NPC history (keep most recent)
+        # Cap per-NPC history
         if len(bucket) > MAX_MEMORIES_PER_NPC:
-            self.memories[npc_id] = bucket[-MAX_MEMORIES_PER_NPC:]
+            # Drop oldest — remove them from the vector store too
+            dropped = len(bucket) - MAX_MEMORIES_PER_NPC
+            old_ids = [_mem_id(npc_id, i) for i in range(dropped)]
+            if self._store:
+                try:
+                    self._store.delete(where={"npc_id": npc_id})
+                    # Re-index the kept memories (simpler than tracking individual IDs)
+                    self.memories[npc_id] = bucket[-MAX_MEMORIES_PER_NPC:]
+                    self._index_npc(npc_id)
+                except Exception:
+                    self.memories[npc_id] = bucket[-MAX_MEMORIES_PER_NPC:]
+            else:
+                self.memories[npc_id] = bucket[-MAX_MEMORIES_PER_NPC:]
+        else:
+            # Just append the new memory to the index
+            mem_idx = len(bucket) - 1
+            mid = _mem_id(npc_id, mem_idx)
+            if self._store:
+                self._store.upsert(
+                    ids=[mid],
+                    texts=[text.strip()],
+                    metadatas=[{"npc_id": npc_id, "ts": time.time(),
+                                "session_id": session_id}],
+                )
 
-        # Invalidate cached vectors for this NPC; rebuilt and re-persisted lazily on recall
-        self._vectors.pop(npc_id, None)
-        self._vec_hashes.pop(npc_id, None)
         if self.persist:
             self._save()
 
-    # -- reading --------------------------------------------------------------
+    # ── reading ───────────────────────────────────────────────────────────────
 
     def recall(self, npc_id: str, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
         """Return this NPC's most relevant past memories for the query."""
@@ -89,22 +89,22 @@ class NPCMemoryStore:
         if not bucket:
             return []
 
-        vecs = self._ensure_vectors(npc_id)
-        if vecs is not None and query.strip():
-            qv = lore_retriever.embed([query])
-            if qv is not None:
-                scores = vecs @ qv[0]
-                order = np.argsort(scores)[::-1][:top_k]
+        if self._store and query.strip():
+            n = min(top_k, len(bucket))
+            hits = self._store.query(query, n=n, where={"npc_id": npc_id})
+            if hits:
                 return [
-                    {**bucket[i], "score": round(float(scores[i]), 4)}
-                    for i in order
+                    {"text": h.text, "ts": h.metadata.get("ts", 0),
+                     "session_id": h.metadata.get("session_id", ""),
+                     "score": h.score}
+                    for h in hits
                 ]
 
-        # Fallback: most recent memories
+        # Recency fallback
         return [{**m, "score": None} for m in bucket[-top_k:][::-1]]
 
     def recall_text(self, npc_id: str, npc_name: str, query: str, top_k: int = 3) -> str:
-        """Format an NPC's recalled memories as a context block, or '' if none."""
+        """Format recalled memories as a context block, or '' if none."""
         hits = self.recall(npc_id, query, top_k)
         if not hits:
             return ""
@@ -113,30 +113,34 @@ class NPCMemoryStore:
             lines.append(f"  - {h['text']}")
         return "\n".join(lines)
 
-    def _ensure_vectors(self, npc_id: str) -> Optional[np.ndarray]:
-        texts = [m["text"] for m in self.memories.get(npc_id, [])]
-        if not texts:
-            self._vectors.pop(npc_id, None)
-            self._vec_hashes.pop(npc_id, None)
-            return None
+    # ── index helpers ─────────────────────────────────────────────────────────
 
-        h = _texts_hash(texts)
-        # Reuse persisted/cached vectors when the memories are unchanged
-        if self._vec_hashes.get(npc_id) == h and self._vectors.get(npc_id) is not None:
-            return self._vectors[npc_id]
+    def _mem_id(self, npc_id: str, idx: int) -> str:
+        return _mem_id(npc_id, idx)
 
-        vecs = lore_retriever.embed(texts)
-        if vecs is not None:
-            self._vectors[npc_id] = vecs
-            self._vec_hashes[npc_id] = h
-            if self.persist:
-                self._save_vectors()
-        else:  # model unavailable — drop stale vectors, recall falls back to recency
-            self._vectors.pop(npc_id, None)
-            self._vec_hashes.pop(npc_id, None)
-        return vecs
+    def _index_npc(self, npc_id: str) -> None:
+        """(Re)index all memories for a single NPC."""
+        bucket = self.memories.get(npc_id, [])
+        if not bucket or not self._store:
+            return
+        ids   = [_mem_id(npc_id, i) for i in range(len(bucket))]
+        texts = [m["text"] for m in bucket]
+        metas = [{"npc_id": npc_id, "ts": m["ts"],
+                  "session_id": m.get("session_id", "")} for m in bucket]
+        self._store.upsert(ids, texts, metas)
 
-    # -- persistence ----------------------------------------------------------
+    def _rebuild_index(self) -> None:
+        """Index all persisted memories into VectorStore (idempotent via upsert)."""
+        if not self._store:
+            return
+        for npc_id in self.memories:
+            self._index_npc(npc_id)
+        total = sum(len(v) for v in self.memories.values())
+        if total:
+            print(f"[NPCMemory] Indexed {total} memories across "
+                  f"{len(self.memories)} NPCs via {self._store.backend}.")
+
+    # ── persistence ───────────────────────────────────────────────────────────
 
     def _load(self) -> None:
         if not STORE_PATH.exists():
@@ -151,50 +155,21 @@ class NPCMemoryStore:
         STORE_DIR.mkdir(parents=True, exist_ok=True)
         STORE_PATH.write_text(json.dumps(self.memories, indent=2), encoding="utf-8")
 
-    def _save_vectors(self) -> None:
-        """Persist all cached NPC embeddings + their content hashes to disk."""
-        STORE_DIR.mkdir(parents=True, exist_ok=True)
-        arrays = {npc: v for npc, v in self._vectors.items() if v is not None}
-        if not arrays:
-            return
-        np.savez_compressed(VEC_PATH, **arrays)
-        VEC_META_PATH.write_text(json.dumps({
-            "model": getattr(lore_retriever, "model_name", ""),
-            "hashes": self._vec_hashes,
-        }), encoding="utf-8")
-
-    def _load_vectors(self) -> None:
-        """Load persisted embeddings, keeping only those still matching the
-        current memories and the current embedding model. Mismatches are left
-        out and rebuilt lazily on first recall."""
-        if not (VEC_PATH.exists() and VEC_META_PATH.exists()):
-            return
-        try:
-            meta = json.loads(VEC_META_PATH.read_text(encoding="utf-8"))
-            if meta.get("model") != getattr(lore_retriever, "model_name", ""):
-                return  # model changed → all cached vectors are stale
-            stored_hashes = meta.get("hashes", {})
-            with np.load(VEC_PATH) as data:
-                for npc_id in data.files:
-                    texts = [m["text"] for m in self.memories.get(npc_id, [])]
-                    if texts and stored_hashes.get(npc_id) == _texts_hash(texts):
-                        self._vectors[npc_id] = data[npc_id].astype(np.float32)
-                        self._vec_hashes[npc_id] = stored_hashes[npc_id]
-        except Exception as e:
-            print(f"[NPCMemory] Could not load vector cache ({e}); will rebuild lazily.")
-
-    # -- introspection --------------------------------------------------------
+    # ── introspection ─────────────────────────────────────────────────────────
 
     def stats(self) -> Dict[str, Any]:
         return {
             "npcs_tracked": len(self.memories),
             "total_memories": sum(len(v) for v in self.memories.values()),
             "per_npc": {k: len(v) for k, v in self.memories.items()},
-            "vectors_cached": sum(
-                int(v.shape[0]) for v in self._vectors.values() if v is not None
-            ),
-            "vector_store_persisted": VEC_PATH.exists(),
+            "vector_backend": self._store.backend if self._store else "none",
+            "vector_count": self._store.count() if self._store else 0,
         }
+
+
+def _mem_id(npc_id: str, idx: int) -> str:
+    """Stable unique ID for a memory entry."""
+    return f"{npc_id}__{idx}"
 
 
 # Global store instance
