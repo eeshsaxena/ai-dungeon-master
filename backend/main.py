@@ -52,6 +52,9 @@ from item_system import (
     inventory_to_display, item_summary, tick_effects
 )
 from dialogue_engine import dialogue_engine, DialogueContext
+from encounter_engine import encounter_engine
+from achievements import get_tracker as get_achievement_tracker, ACHIEVEMENTS
+from day_night import get_phase as get_time_phase, time_prompt, night_encounter_multiplier
 
 # ── App Setup ──────────────────────────────────────────────────────────────────
 
@@ -219,6 +222,39 @@ async def narrate(request: NarrateRequest) -> NarrateResponse:
     if session.player.turns_played % 5 == 0:
         _auto_save(request.session_id, session)
 
+    # Phase 11: time-of-day phase + random encounter roll
+    phase = get_time_phase(session.player.turns_played)
+    response.time_of_day = phase
+
+    # Achievements: first action + turn tracking
+    tracker = get_achievement_tracker(request.session_id)
+    newly_unlocked = []
+    if session.player.turns_played == 1:
+        newly_unlocked.extend(tracker.on_event("first_action", {}))
+    newly_unlocked.extend(tracker.on_event("turn_played", {"is_night": phase["is_night"]}))
+
+    # Random encounter roll (only on certain conditions)
+    encounter = encounter_engine.roll(
+        request.session_id,
+        request.current_location,
+        session.player.turns_played,
+        is_night=phase["is_night"],
+        player_level=session.player.level,
+        difficulty=request.difficulty.value if hasattr(request.difficulty, "value") else str(request.difficulty),
+    )
+    if encounter:
+        response.encounter = {
+            "type": encounter.type,
+            "description": encounter.description,
+            "enemy_archetype": encounter.enemy_archetype,
+            "item_id": encounter.item_id,
+        }
+        # Append the encounter description as a DM aside
+        response.narrative += f"\n\n*{encounter.description}*"
+
+    if newly_unlocked:
+        response.achievements_unlocked = newly_unlocked
+
     # Dynamic quest generation — check conditions and generate if warranted
     all_quest_titles = [q.get("title", "") for q in world_graph.get_active_quests() + world_graph.get_available_quests()]
     all_quest_titles += [q["title"] for q in quest_generator.get_quests(request.session_id)]
@@ -312,11 +348,57 @@ async def resolve_combat(request: CombatRequest) -> CombatResponse:
                 memory.add_key_beat(f"Found: {', '.join(loot_names)}")
 
             memory.add_key_beat(f"Defeated {request.enemy.name}! Gained {result.xp_gained} XP")
+
+            # Phase 11: Achievement triggers
+            tracker = get_achievement_tracker(request.session_id)
+            ach_unlocked = tracker.on_event("combat_won", {
+                "archetype": str(request.enemy.archetype),
+                "took_damage": request.player_stats.hp != request.player_stats.max_hp,
+                "difficulty": request.player_stats.emotion_state.value if hasattr(request.player_stats.emotion_state, "value") else "medium",
+            })
+            if result.level_up:
+                ach_unlocked.extend(tracker.on_event("level_up", {"level": result.new_level or session.player.level}))
+                for spell in (result.new_spells or []):
+                    ach_unlocked.extend(tracker.on_event("spell_learned", {
+                        "spell": spell,
+                        "total_spells": len(session.player.spells_known),
+                    }))
+            if len(session.player.inventory) >= 10:
+                ach_unlocked.extend(tracker.on_event("inventory_update", {"count": len(session.player.inventory)}))
+            # Attach to response via loot metadata
+            if ach_unlocked:
+                result.loot = (result.loot or []) + [{"_achievement": a} for a in ach_unlocked]
         else:
             session.player.hp = 10
             memory.add_key_beat(f"Defeated by {request.enemy.name}. Barely escaped.")
 
     return result
+
+
+# ── Achievements ───────────────────────────────────────────────────────────────
+
+@app.get("/api/achievements/{session_id}")
+async def get_achievements(session_id: str):
+    """Get full achievement progress for a session."""
+    tracker = get_achievement_tracker(session_id)
+    return tracker.progress()
+
+
+@app.get("/api/achievements")
+async def list_all_achievements():
+    """List the full achievement catalog (without progress)."""
+    return {"achievements": ACHIEVEMENTS}
+
+
+# ── Time of Day ────────────────────────────────────────────────────────────────
+
+@app.get("/api/time/{session_id}")
+async def get_session_time(session_id: str):
+    """Get current in-game time of day for the session."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return get_time_phase(session.player.turns_played)
 
 
 # ── Inventory / Item System ────────────────────────────────────────────────────

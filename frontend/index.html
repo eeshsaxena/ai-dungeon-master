@@ -153,6 +153,10 @@
         <span class="location-icon">📍</span>
         <span id="location-name">The Three Broomsticks</span>
       </div>
+      <div class="time-badge" id="time-badge" title="In-game time of day">
+        <span id="time-emoji">☀️</span>
+        <span id="time-display">08:00</span>
+      </div>
     </div>
     <div class="top-bar-center">
       <div class="quest-ticker" id="quest-ticker">
@@ -165,6 +169,7 @@
         <span class="turn-icon">🎲</span>
         <span>Turn <span id="turn-count">1</span></span>
       </div>
+      <button class="icon-btn" id="achievements-btn" title="Achievements">🏆</button>
       <button class="icon-btn" id="settings-btn" title="Settings">⚙️</button>
       <button class="icon-btn" id="help-btn" title="Help">❓</button>
     </div>
@@ -425,6 +430,31 @@
     </div>
   </footer>
 
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- ACHIEVEMENTS MODAL -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="achievements-modal" class="modal-overlay hidden" style="z-index:1400">
+  <div class="modal-box achievements-box">
+    <div class="modal-rune-border"></div>
+    <h2 class="modal-title">🏆 Achievements</h2>
+    <p class="modal-subtitle"><span id="ach-progress-text">0/30 unlocked</span></p>
+    <div class="achievements-grid" id="achievements-grid"></div>
+    <button class="btn-secondary" id="close-ach-btn" style="margin-top:12px;width:100%">✖ Close</button>
+  </div>
+</div>
+
+<!-- Achievement unlock toast -->
+<div id="achievement-toast" class="achievement-toast hidden">
+  <div class="ach-toast-inner">
+    <div class="ach-toast-burst">🏆</div>
+    <div>
+      <div class="ach-toast-label">Achievement Unlocked</div>
+      <div class="ach-toast-name"><span id="ach-toast-emoji">🏆</span> <span id="ach-toast-name">Achievement</span></div>
+      <div class="ach-toast-desc" id="ach-toast-desc">Description here</div>
+    </div>
+  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════ -->

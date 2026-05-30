@@ -67,6 +67,9 @@ backend/saves/
 # ── World state (per-session world mutations — runtime state) ────────────────
 backend/world_state/
 
+# ── Achievement progress (per-session runtime state) ─────────────────────────
+backend/achievements_data/
+
 # ── Jupyter ─────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 *.ipynb
