@@ -146,6 +146,23 @@ const Narrator = (() => {
     return await r.json();
   }
 
+  // ── TTS Voice ────────────────────────────────────────────────────────────
+
+  async function textToSpeech(text, sessionId = '') {
+    const params = new URLSearchParams({ text, session_id: sessionId });
+    const r = await fetch(`${API_BASE}/api/tts?${params}`, { method: 'POST' });
+    if (!r.ok) return null;
+    const data = await r.json();
+    return data.audio || null;
+  }
+
+  async function getTtsStatus() {
+    try {
+      const r = await fetch(`${API_BASE}/api/tts-status`);
+      return await r.json();
+    } catch { return { provider: 'disabled', ready: false }; }
+  }
+
   // ── Save / Load ─────────────────────────────────────────────────────────
 
   // ── Dynamic Quests ───────────────────────────────────────────────────────
@@ -258,6 +275,8 @@ Behind the bar, Madam Rosmerta polishes a glass and watches your exchange with e
     getQuests,
     generateScene,
     classifyEmotion,
+    textToSpeech,
+    getTtsStatus,
     generateQuest,
     getDynamicQuests,
     saveGame,

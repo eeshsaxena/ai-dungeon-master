@@ -45,6 +45,8 @@ from npc_memory import npc_memory_store
 from save_manager import save_manager
 from progression import process_xp_gain, xp_to_next, title_for_level, spells_for_level
 from quest_generator import quest_generator, QuestContext
+from world_state_store import get_world_state, drop_world_state
+from tts_engine import synthesize as tts_synthesize, tts_status, warmup_coqui
 
 # ── App Setup ──────────────────────────────────────────────────────────────────
 
@@ -189,12 +191,18 @@ async def narrate(request: NarrateRequest) -> NarrateResponse:
             npc["id"], f"The player {request.player_input}", request.session_id
         )
 
-    # Apply world state updates
+    # Apply world state updates + persist location visits
+    ws = get_world_state(request.session_id)
+    ws.visit_location(request.current_location)
     updates = response.world_state_updates
     if "new_location" in updates:
-        world_graph.update_player_location(updates["new_location"])
-        session.player.current_location = updates["new_location"]
-        memory.add_world_change(f"Player moved to {updates['new_location']}")
+        new_loc = updates["new_location"]
+        world_graph.update_player_location(new_loc)
+        session.player.current_location = new_loc
+        memory.add_world_change(f"Player moved to {new_loc}")
+        first_visit = ws.visit_location(new_loc)
+        if first_visit:
+            ws.add_event(f"First visited {new_loc}")
 
     # Update session
     session.player.turns_played += 1
@@ -238,11 +246,14 @@ async def narrate(request: NarrateRequest) -> NarrateResponse:
 
 
 def _auto_save(session_id: str, session) -> None:
-    """Background auto-save — never raises."""
+    """Background auto-save (player + memory + world state) — never raises."""
     try:
         mem = memory_manager.get(session_id)
         memory_data = mem.to_dict() if mem else {}
-        save_manager.save(session_id, session.player.model_dump(), memory_data)
+        ws  = get_world_state(session_id)
+        player_dict = session.player.model_dump()
+        player_dict["_world_state"] = ws.to_dict()   # bundle into the save
+        save_manager.save(session_id, player_dict, memory_data)
     except Exception:
         pass
 
@@ -389,10 +400,18 @@ async def load_game(filename: str):
     for change in saved_mem.get("world_changes", []):
         mem.add_world_change(change)
 
+    # Restore world state (quest statuses, visited locations, flags)
+    saved_ws = data["player"].get("_world_state")
+    if saved_ws:
+        ws = get_world_state(new_sid)
+        ws.from_dict(saved_ws)
+        ws.session_id = new_sid   # restamp with new session id
+
     return {
         "session_id": new_sid,
         "player": player.model_dump(),
         "loaded_from": filename,
+        "world_state": get_world_state(new_sid).summary(),
     }
 
 
@@ -513,6 +532,37 @@ async def sd_status():
         "error": error,
         "model": _image_gen.SD_MODEL_ID,
     }
+
+
+@app.post("/api/tts")
+async def text_to_speech(text: str, session_id: str = ""):
+    """Convert DM narrative text to speech. Returns base64 audio data URI or null."""
+    audio = await tts_synthesize(text)
+    return {"audio": audio, "provider": os.getenv("TTS_PROVIDER", "disabled")}
+
+
+@app.get("/api/tts-status")
+async def get_tts_status():
+    """Report TTS provider readiness."""
+    return tts_status()
+
+
+@app.get("/api/world-state-store/{session_id}")
+async def get_world_state_store(session_id: str):
+    """Return the persistent world state delta for a session."""
+    ws = get_world_state(session_id)
+    return ws.summary()
+
+
+@app.post("/api/world-state-store/{session_id}/quest")
+async def update_quest_status(session_id: str, quest_id: str, status: str):
+    """Mark a quest active/completed/failed."""
+    ws = get_world_state(session_id)
+    ws.set_quest_status(quest_id, status)
+    if status == "completed":
+        memory = memory_manager.get_or_create(session_id)
+        memory.add_key_beat(f"Completed quest: {quest_id}")
+    return {"updated": True, "quest_id": quest_id, "status": status}
 
 
 @app.post("/api/generate-scene")
@@ -681,6 +731,10 @@ async def startup():
             print("   LoRA: loading adapter in background…")
         except ImportError:
             print("   LoRA: peft/transformers not installed — run: pip install peft trl bitsandbytes")
+    # Pre-warm Coqui TTS in background (no-op if TTS_PROVIDER != "coqui"/"auto")
+    warmup_coqui()
+    ts = tts_status()
+    print(f"   TTS: {ts['provider']}" + (" (loading…)" if ts.get("loading") else " (ready)" if ts.get("ready") else " (disabled)"))
     print("   Ready!")
 
 

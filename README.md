@@ -90,6 +90,8 @@ Player Input (Text)
 | Vector DB | ChromaDB / numpy pluggable vector store | ✅ Phase 6 |
 | Dynamic Quests | LLM-generated side quests from story state | ✅ Phase 7 |
 | LoRA Fine-tune | QLoRA training pipeline + HP DM dataset | ✅ Phase 8 |
+| World State | Quest/location persistence across restarts | ✅ Phase 9 |
+| TTS Voice | Coqui GPU / pyttsx3 / ElevenLabs narration | ✅ Phase 9 |
 
 ---
 
