@@ -484,6 +484,17 @@ async function processPlayerAction(text) {
       addDynamicQuest(response.new_quest);
     }
 
+    // Phase 11: time-of-day, encounters, achievements
+    if (response.time_of_day) {
+      updateTimeBadge(response.time_of_day);
+    }
+    if (response.encounter) {
+      handleEncounter(response.encounter);
+    }
+    if (response.achievements_unlocked && response.achievements_unlocked.length > 0) {
+      response.achievements_unlocked.forEach(a => showAchievementToast(a));
+    }
+
     // Update scene
     if (response.atmosphere) {
       updateSceneAtmosphere(response.atmosphere);
@@ -556,8 +567,16 @@ async function triggerCombat(archetype) {
       if (result.player_won) {
         GameState.playerStats.xp += result.xp_gained || 0;
         if (result.loot?.length > 0) {
-          result.loot.forEach(item => GameState.playerStats.inventory.push(item));
+          // Phase 11: filter out embedded achievement payloads
+          const realLoot = [];
+          const achievements = [];
+          result.loot.forEach(item => {
+            if (item._achievement) achievements.push(item._achievement);
+            else realLoot.push(item);
+          });
+          realLoot.forEach(item => GameState.playerStats.inventory.push(item));
           updateInventory();
+          achievements.forEach(a => showAchievementToast(a));
         }
         addNarrativeEntry('dm', `*You stand victorious! The ${enemy.name} is defeated.* ✨`, 'warm');
         // Server-authoritative level-up (or client fallback in offline mode)
@@ -1371,6 +1390,103 @@ function initDialogue() {
   });
 }
 
+// ── Phase 11: Time-of-day badge ──────────────────────────────────────────────
+
+function updateTimeBadge(timeData) {
+  const emojiEl = document.getElementById('time-emoji');
+  const displayEl = document.getElementById('time-display');
+  if (emojiEl) emojiEl.textContent = timeData.emoji || '☀️';
+  if (displayEl) displayEl.textContent = timeData.display || '08:00';
+  // Tint scene atmosphere if night
+  const scenePanel = document.querySelector('.scene-panel');
+  if (scenePanel) {
+    scenePanel.classList.toggle('night-mode', timeData.is_night);
+  }
+}
+
+// ── Phase 11: Encounter handling ─────────────────────────────────────────────
+
+function handleEncounter(encounter) {
+  if (encounter.type === 'combat' && encounter.enemy_archetype) {
+    setTimeout(() => triggerCombat(encounter.enemy_archetype), 1500);
+  } else if (encounter.type === 'discovery' && encounter.item_id) {
+    // Auto-add discovered item via give endpoint
+    if (GameState.backendConnected && GameState.sessionId) {
+      const params = new URLSearchParams({ item_id: encounter.item_id });
+      fetch(`http://localhost:8000/api/inventory/${GameState.sessionId}/give?${params}`, { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+          if (res.given && res.item) {
+            GameState.playerStats.inventory.push(res.item);
+            updateInventory();
+            showItemUseToast(res.item.emoji, `Found: ${res.item.name}`, 'Added to inventory');
+          }
+        }).catch(() => {});
+    }
+  }
+  // flavor encounters just appear as narrative — already handled by backend appending to narrative
+}
+
+// ── Phase 11: Achievements ───────────────────────────────────────────────────
+
+function showAchievementToast(ach) {
+  const toast = document.getElementById('achievement-toast');
+  if (!toast) return;
+  document.getElementById('ach-toast-emoji').textContent = ach.emoji || '🏆';
+  document.getElementById('ach-toast-name').textContent = ach.name;
+  document.getElementById('ach-toast-desc').textContent = ach.desc || ach.description || '';
+  toast.classList.remove('hidden');
+  toast.classList.add('show');
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.classList.add('hidden'), 400);
+  }, 4500);
+}
+
+async function openAchievementsModal() {
+  const modal = document.getElementById('achievements-modal');
+  const grid = document.getElementById('achievements-grid');
+  const progressText = document.getElementById('ach-progress-text');
+  if (!modal || !grid) return;
+
+  modal.classList.remove('hidden');
+  grid.innerHTML = '<div style="color:var(--text-muted);text-align:center;grid-column:1/-1;padding:20px">Loading...</div>';
+
+  if (!GameState.backendConnected || !GameState.sessionId) {
+    grid.innerHTML = '<div style="color:var(--text-muted);text-align:center;grid-column:1/-1;padding:20px">Achievements require backend connection.</div>';
+    return;
+  }
+  try {
+    const r = await fetch(`http://localhost:8000/api/achievements/${GameState.sessionId}`);
+    const data = await r.json();
+    progressText.textContent = `${data.unlocked}/${data.total} unlocked`;
+    grid.innerHTML = '';
+    data.achievements.forEach(a => {
+      const card = document.createElement('div');
+      card.className = `ach-card ${a.unlocked ? 'unlocked' : 'locked'}`;
+      const progBar = (a.progress !== undefined && a.threshold)
+        ? `<div class="ach-progress"><div class="ach-progress-fill" style="width:${Math.min(100, (a.progress/a.threshold)*100)}%"></div></div><div class="ach-progress-text">${a.progress}/${a.threshold}</div>`
+        : '';
+      card.innerHTML = `
+        <div class="ach-emoji">${a.unlocked ? a.emoji : '🔒'}</div>
+        <div class="ach-name">${a.name}</div>
+        <div class="ach-desc">${a.description}</div>
+        ${progBar}
+      `;
+      grid.appendChild(card);
+    });
+  } catch {
+    grid.innerHTML = '<div style="color:var(--color-danger);text-align:center;grid-column:1/-1">Failed to load achievements.</div>';
+  }
+}
+
+function initAchievements() {
+  document.getElementById('achievements-btn')?.addEventListener('click', openAchievementsModal);
+  document.getElementById('close-ach-btn')?.addEventListener('click', () => {
+    document.getElementById('achievements-modal').classList.add('hidden');
+  });
+}
+
 // Detect "talk to [NPC]" in player input and open dialogue
 function checkDialogueTrigger(text) {
   const lower = text.toLowerCase();
@@ -1649,6 +1765,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initBottomBarHandlers();
   initVoice();
   initDialogue();
+  initAchievements();
 
   // Periodic emotion check
   setInterval(async () => {

@@ -75,6 +75,9 @@ class NarrateResponse(BaseModel):
     detected_emotion: EmotionState = EmotionState.NEUTRAL
     difficulty_adjustment: Optional[str] = None
     new_quest: Optional[Dict[str, Any]] = None  # dynamically generated quest, if any
+    encounter: Optional[Dict[str, Any]] = None  # Phase 11: random encounter, if rolled
+    time_of_day: Optional[Dict[str, Any]] = None  # Phase 11: in-game time
+    achievements_unlocked: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class CombatAction(str, Enum):
