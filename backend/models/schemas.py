@@ -73,6 +73,7 @@ class NarrateResponse(BaseModel):
     scene_prompt: str  # Prompt for image generation
     detected_emotion: EmotionState = EmotionState.NEUTRAL
     difficulty_adjustment: Optional[str] = None
+    new_quest: Optional[Dict[str, Any]] = None  # dynamically generated quest, if any
 
 
 class CombatAction(str, Enum):

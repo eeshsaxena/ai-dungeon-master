@@ -88,7 +88,8 @@ Player Input (Text)
 | Save / Load System | Disk-backed session persistence (JSON) | ✅ Phase 5 |
 | Level Progression | XP → Level 1-20, spell unlocks, titles | ✅ Phase 5 |
 | Vector DB | ChromaDB / numpy pluggable vector store | ✅ Phase 6 |
-| Fine-tuned LLM | LoRA on HP corpus | 📅 Phase 7 |
+| Dynamic Quests | LLM-generated side quests from story state | ✅ Phase 7 |
+| Fine-tuned LLM | LoRA on HP corpus | 📅 Phase 8 |
 
 ---
 
@@ -195,9 +196,16 @@ ai-dungeon-master/
 - **NPC memory upgrade** — `npc_memory.py` uses `VectorStore`; memories are seeded from persisted JSON on startup; new memories upserted individually on `record()`; recall uses Chroma's `where` filter for efficient per-NPC queries
 - **Config**: `VECTOR_BACKEND=auto|chroma|numpy`, `EMBED_MODEL=all-MiniLM-L6-v2`
 
+### ✅ Phase 7 (Current)
+- **Dynamic quest generation** — `backend/quest_generator.py` builds a `QuestContext` from the player's current location, NPCs present, recent story beats, level, and reputation, then asks the LLM (Ollama/OpenAI) to output a structured JSON quest. Falls back to a hand-authored library of 19 location-specific templates (3 per location) when the LLM is offline or unavailable.
+- **Smart trigger logic** — generation fires automatically every 5 turns and/or on location change, capped at 3 active generated quests per session; a `POST /api/generate-quest?force=true` endpoint allows manual triggering
+- **Quest discovery UX** — the hook sentence is woven into the narrative as a DM entry 0.8 s after generation; a purple slide-in toast (top-right) shows the title, difficulty, and XP reward for 4 s
+- **✨ badge in quest log** — generated quests render with a purple glow border and ✨ prefix to distinguish them from static quests; clicking shows the same detail view
+- **Session restore** — dynamic quests are fetched via `GET /api/dynamic-quests/{session_id}` when loading a saved game, so the quest log is fully restored
+- **New API**: `POST /api/generate-quest`, `GET /api/dynamic-quests/{session_id}`
+
 ### 📅 Next
-- Phase 7: Dynamic quest generation (LLM-generated quests based on story state)
-- Phase 7: Fine-tuned LLM (LoRA on HP corpus)
+- Phase 8: Fine-tuned LLM (LoRA on HP corpus)
 
 ---
 

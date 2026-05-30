@@ -44,6 +44,7 @@ from rl_train import simulate as rl_simulate
 from npc_memory import npc_memory_store
 from save_manager import save_manager
 from progression import process_xp_gain, xp_to_next, title_for_level, spells_for_level
+from quest_generator import quest_generator, QuestContext
 
 # ── App Setup ──────────────────────────────────────────────────────────────────
 
@@ -205,6 +206,27 @@ async def narrate(request: NarrateRequest) -> NarrateResponse:
     if session.player.turns_played % 5 == 0:
         _auto_save(request.session_id, session)
 
+    # Dynamic quest generation — check conditions and generate if warranted
+    all_quest_titles = [q.get("title", "") for q in world_graph.get_active_quests() + world_graph.get_available_quests()]
+    all_quest_titles += [q["title"] for q in quest_generator.get_quests(request.session_id)]
+    ctx = QuestContext(
+        session_id=request.session_id,
+        player_name=session.player.name,
+        player_level=session.player.level,
+        player_house=str(session.player.house),
+        player_reputation=dict(session.player.reputation),
+        location_id=request.current_location,
+        location_name=(world_graph.get_location_info(request.current_location) or {}).get("label", request.current_location),
+        npcs_here=[n.get("label", n["id"]) for n in npcs_here],
+        key_beats=memory.key_beats[-8:],
+        existing_quest_titles=all_quest_titles,
+        turn_number=session.player.turns_played,
+    )
+    if quest_generator.should_generate(ctx):
+        new_quest = await quest_generator.generate(ctx)
+        if new_quest:
+            response.new_quest = new_quest
+
     # Add hint if triggered
     if hint:
         response.narrative += f"\n\n{hint}"
@@ -271,6 +293,47 @@ async def resolve_combat(request: CombatRequest) -> CombatResponse:
             memory.add_key_beat(f"Defeated by {request.enemy.name}. Barely escaped.")
 
     return result
+
+
+# ── Dynamic Quests ─────────────────────────────────────────────────────────────
+
+@app.post("/api/generate-quest")
+async def generate_quest_endpoint(
+    session_id: str,
+    location_id: str = "loc_001",
+    force: bool = False,
+):
+    """Manually trigger a dynamic quest generation for the current location."""
+    session = get_or_create_session(session_id)
+    memory  = memory_manager.get_or_create(session_id)
+    npcs    = world_graph.get_npcs_at_location(location_id)
+    all_titles = [q.get("title", "") for q in world_graph.get_active_quests() + world_graph.get_available_quests()]
+    all_titles += [q["title"] for q in quest_generator.get_quests(session_id)]
+
+    ctx = QuestContext(
+        session_id=session_id,
+        player_name=session.player.name,
+        player_level=session.player.level,
+        player_house=str(session.player.house),
+        player_reputation=dict(session.player.reputation),
+        location_id=location_id,
+        location_name=(world_graph.get_location_info(location_id) or {}).get("label", location_id),
+        npcs_here=[n.get("label", n["id"]) for n in npcs],
+        key_beats=memory.key_beats[-8:],
+        existing_quest_titles=all_titles,
+        turn_number=session.player.turns_played,
+    )
+    if not force and not quest_generator.should_generate(ctx):
+        return {"generated": False, "reason": "cooldown or max active quests reached"}
+
+    quest = await quest_generator.generate(ctx)
+    return {"generated": quest is not None, "quest": quest}
+
+
+@app.get("/api/dynamic-quests/{session_id}")
+async def list_dynamic_quests(session_id: str):
+    """Return all generated quests for a session."""
+    return {"quests": quest_generator.get_quests(session_id)}
 
 
 # ── Save / Load ────────────────────────────────────────────────────────────────
