@@ -89,7 +89,7 @@ Player Input (Text)
 | Level Progression | XP → Level 1-20, spell unlocks, titles | ✅ Phase 5 |
 | Vector DB | ChromaDB / numpy pluggable vector store | ✅ Phase 6 |
 | Dynamic Quests | LLM-generated side quests from story state | ✅ Phase 7 |
-| Fine-tuned LLM | LoRA on HP corpus | 📅 Phase 8 |
+| LoRA Fine-tune | QLoRA training pipeline + HP DM dataset | ✅ Phase 8 |
 
 ---
 
@@ -204,8 +204,34 @@ ai-dungeon-master/
 - **Session restore** — dynamic quests are fetched via `GET /api/dynamic-quests/{session_id}` when loading a saved game, so the quest log is fully restored
 - **New API**: `POST /api/generate-quest`, `GET /api/dynamic-quests/{session_id}`
 
+### ✅ Phase 8 (Current)
+- **HP DM dataset** — `backend/lora_train/dataset_builder.py` builds a ShareGPT-format JSONL: 37 hand-authored DM examples (atmospheric narration per location, NPC conversations, combat, spellcasting) + auto-generated examples from world lore (location arrivals, NPC encounters, spell effects) = **67 examples** from static corpus alone
+- **Self-distillation generator** — `lora_train/generate_data.py` uses the running Ollama instance to generate 100+ additional examples (20 player actions × 7 locations), teaching the same HP DM voice at scale; output merged into the training corpus via `build_dataset(extra_path=...)`
+- **QLoRA training** — `lora_train/train.py`: 4-bit quantized LoRA on `microsoft/phi-3-mini-4k-instruct` (3.8 B params, ~8 GB VRAM for training). PEFT + TRL `SFTTrainer`. LoRA rank 16 / alpha 32, cosine LR schedule, 3 epochs, paged AdamW 8-bit. Adapter saved to `lora_train/adapter/` (~50–150 MB). Model family auto-detects correct LoRA target modules (Phi-3, Llama, Mistral, Qwen).
+- **LoRA inference** — `lora_train/infer.py` lazy-loads model + adapter once at startup in a background thread (same pattern as SD diffusers), runs generation in `run_in_executor` so the event loop stays free
+- **`LLM_PROVIDER=lora`** — `narrator.py` routes to `lora_train/infer.py`; `main.py` calls `warmup_lora()` at startup and falls back to mock mode if the adapter isn't found
+
+**To train and activate:**
+```bash
+# 1. Install dependencies
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip install peft trl bitsandbytes datasets
+
+# 2. (Optional) generate extra training data using your running Ollama
+python backend/lora_train/generate_data.py --num 100
+
+# 3. Train (~30-60 min on a mid-range GPU)
+python backend/lora_train/train.py
+
+# 4. Activate in .env
+LLM_PROVIDER=lora
+LORA_BASE_MODEL=microsoft/phi-3-mini-4k-instruct
+LORA_ADAPTER_PATH=backend/lora_train/adapter
+```
+
 ### 📅 Next
-- Phase 8: Fine-tuned LLM (LoRA on HP corpus)
+- World state persistence (completed quests / visited locations survive restarts)
+- Voice narration via TTS (ElevenLabs / Coqui)
 
 ---
 
