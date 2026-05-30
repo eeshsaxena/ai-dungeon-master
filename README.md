@@ -87,7 +87,8 @@ Player Input (Text)
 | Stable Diffusion | Photoreal scene images (diffusers or A1111) | ✅ Phase 3+ |
 | Save / Load System | Disk-backed session persistence (JSON) | ✅ Phase 5 |
 | Level Progression | XP → Level 1-20, spell unlocks, titles | ✅ Phase 5 |
-| Fine-tuned LLM | LoRA on HP corpus | 📅 Phase 6 |
+| Vector DB | ChromaDB / numpy pluggable vector store | ✅ Phase 6 |
+| Fine-tuned LLM | LoRA on HP corpus | 📅 Phase 7 |
 
 ---
 
@@ -186,9 +187,17 @@ ai-dungeon-master/
 - **Pipeline warmup polling** — frontend polls `/api/sd-status` at startup; once the model finishes loading it automatically fetches the first scene
 - **Auto-fallback** — if diffusers errors (VRAM OOM, model missing), falls back to the procedural renderer silently
 
+### ✅ Phase 6 (Current)
+- **Pluggable vector store** — new `backend/vector_store.py` provides a unified `VectorStore` interface backed by ChromaDB (persistent, production-ready) or numpy (zero-install fallback). Auto-detects which is available at startup.
+- **ChromaDB backend** — `pip install chromadb` to activate; data persists to `backend/chroma_db/` (gitignored); uses `PersistentClient` with HNSWLib cosine similarity and `SentenceTransformerEmbeddingFunction`; metadata filtering for NPC memory (filter by `npc_id`)
+- **numpy fallback** — all features continue to work without ChromaDB; includes keyword overlap fallback when embeddings are unavailable
+- **RAG upgrade** — `rag.py` now uses `VectorStore`; lore index upserted once and reused (Chroma is persistent across restarts — no more `.npz` cache files to manage)
+- **NPC memory upgrade** — `npc_memory.py` uses `VectorStore`; memories are seeded from persisted JSON on startup; new memories upserted individually on `record()`; recall uses Chroma's `where` filter for efficient per-NPC queries
+- **Config**: `VECTOR_BACKEND=auto|chroma|numpy`, `EMBED_MODEL=all-MiniLM-L6-v2`
+
 ### 📅 Next
-- Chroma/FAISS vector DB upgrade for scalable RAG and NPC memory
-- Phase 6: Fine-tuned LLM (LoRA on HP corpus)
+- Phase 7: Dynamic quest generation (LLM-generated quests based on story state)
+- Phase 7: Fine-tuned LLM (LoRA on HP corpus)
 
 ---
 

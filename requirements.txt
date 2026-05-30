@@ -10,6 +10,10 @@ scikit-learn>=1.4.0
 aiofiles>=23.2.0
 python-multipart>=0.0.9
 
+# ── Vector DB (auto-detected; upgrades RAG + NPC memory from numpy to Chroma) ──
+# pip install chromadb   — no GPU needed; stores to backend/chroma_db/
+chromadb>=0.5.0
+
 # ── Stable Diffusion (IMAGE_PROVIDER=diffusers) ────────────────────────────────
 # Install PyTorch FIRST (CUDA) — pick the right CUDA version for your driver:
 #   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
