@@ -118,6 +118,166 @@
       "rewards": { "xp": 200, "galleons": 0, "items": [], "reputation": { "faction_004": 50 } },
       "connected_quests": ["quest_002"],
       "difficulty": "medium"
+    },
+    {
+      "id": "quest_side_003",
+      "title": "Honeydukes Heist",
+      "type": "side",
+      "status": "available",
+      "giver": "npc_001",
+      "description": "Someone has been stealing from Honeydukes — but only specific items: every batch of Crystallized Pineapple, every Acid Pop, every Pepper Imp. The thief has been getting in and out without breaking the wards.",
+      "objectives": [
+        { "id": "obj_s03_01", "text": "Investigate the back entrance of Honeydukes", "completed": false },
+        { "id": "obj_s03_02", "text": "Identify the thief's method of entry", "completed": false },
+        { "id": "obj_s03_03", "text": "Confront the thief or report your findings", "completed": false }
+      ],
+      "rewards": { "xp": 220, "galleons": 80, "items": ["crystallised_pineapple"], "reputation": { "Order of the Phoenix": 5 } },
+      "connected_quests": [],
+      "difficulty": "easy"
+    },
+    {
+      "id": "quest_side_004",
+      "title": "The Whomping Willow's Sorrow",
+      "type": "side",
+      "status": "available",
+      "giver": "npc_002",
+      "description": "The Whomping Willow has stopped attacking. For two weeks. Neville is convinced it's not relief — it's grief. Something happened to it, and it would tell you if it could.",
+      "objectives": [
+        { "id": "obj_s04_01", "text": "Examine the Whomping Willow without being struck", "completed": false },
+        { "id": "obj_s04_02", "text": "Find what changed in the tree's environment", "completed": false },
+        { "id": "obj_s04_03", "text": "Restore whatever was lost", "completed": false }
+      ],
+      "rewards": { "xp": 280, "galleons": 30, "items": [], "reputation": { "Centaur Herd": 20 } },
+      "connected_quests": ["quest_side_002"],
+      "difficulty": "medium"
+    },
+    {
+      "id": "quest_side_005",
+      "title": "Letters from a Dead Auror",
+      "type": "side",
+      "status": "available",
+      "giver": "npc_008",
+      "description": "An owl delivers a letter to Minister Shacklebolt — postmarked four years ago, in the handwriting of an Auror who died during the Second Wizarding War. The contents describe an operation that didn't happen until last month. Either time is broken, or someone has been planning very far ahead.",
+      "objectives": [
+        { "id": "obj_s05_01", "text": "Authenticate the letter's handwriting and ink", "completed": false },
+        { "id": "obj_s05_02", "text": "Trace the owl's flight path", "completed": false },
+        { "id": "obj_s05_03", "text": "Reveal the time-displacement source", "completed": false }
+      ],
+      "rewards": { "xp": 450, "galleons": 150, "items": ["pensieve_fragment"], "reputation": { "Ministry of Magic": 25 } },
+      "connected_quests": ["quest_003"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "quest_side_006",
+      "title": "The Quibbler Anomaly",
+      "type": "side",
+      "status": "available",
+      "giver": "npc_001",
+      "description": "Every copy of last week's Quibbler has shifted, in print, overnight. The articles are now about events that haven't happened yet — but they're starting to. Luna Lovegood wants someone to help her figure out who's editing reality.",
+      "objectives": [
+        { "id": "obj_s06_01", "text": "Read all current Quibbler articles carefully", "completed": false },
+        { "id": "obj_s06_02", "text": "Verify which prophecies have already come true", "completed": false },
+        { "id": "obj_s06_03", "text": "Find the source of the rewriting", "completed": false }
+      ],
+      "rewards": { "xp": 320, "galleons": 0, "items": ["remembrall"], "reputation": { "Order of the Phoenix": 15 } },
+      "connected_quests": ["quest_002"],
+      "difficulty": "medium"
+    },
+    {
+      "id": "quest_side_007",
+      "title": "Borgin's Bargain",
+      "type": "side",
+      "status": "available",
+      "giver": "npc_005",
+      "description": "Borgin offers you a private deal: retrieve a sealed box from a hidden cellar beneath Knockturn Alley. He won't say what's inside. Refuse, and he won't say what happens next either. The Galleons offered are excessive — which is the warning sign.",
+      "objectives": [
+        { "id": "obj_s07_01", "text": "Locate the hidden cellar entrance", "completed": false },
+        { "id": "obj_s07_02", "text": "Retrieve the sealed box without opening it", "completed": false },
+        { "id": "obj_s07_03", "text": "Decide whether to deliver, destroy, or report it", "completed": false }
+      ],
+      "rewards": { "xp": 400, "galleons": 300, "items": [], "reputation": { "Hollow Circle": 10, "Ministry of Magic": -10 } },
+      "connected_quests": [],
+      "difficulty": "hard"
+    },
+    {
+      "id": "quest_side_008",
+      "title": "The Phoenix's Last Tear",
+      "type": "side",
+      "status": "available",
+      "giver": "npc_003",
+      "description": "Fawkes — Dumbledore's phoenix — has been seen again at Hogwarts, though it should have been impossible. McGonagall believes Fawkes returned for a reason. The phoenix appears only at midnight, in the same corridor, and weeps once before disappearing.",
+      "objectives": [
+        { "id": "obj_s08_01", "text": "Be in the corridor at midnight", "completed": false },
+        { "id": "obj_s08_02", "text": "Collect the phoenix tear before it evaporates", "completed": false },
+        { "id": "obj_s08_03", "text": "Determine what the tear is meant to heal", "completed": false }
+      ],
+      "rewards": { "xp": 500, "galleons": 0, "items": ["healing_potion", "healing_potion"], "reputation": { "Order of the Phoenix": 30 } },
+      "connected_quests": [],
+      "difficulty": "medium"
+    },
+    {
+      "id": "quest_side_009",
+      "title": "The Mirror in the Cellar",
+      "type": "side",
+      "status": "available",
+      "giver": "npc_001",
+      "description": "Rosmerta tells you that the cellar of the Three Broomsticks now contains a tall standing mirror that wasn't there last week — and the mirror shows everyone *as someone else*. She'd like it removed before any customers find it.",
+      "objectives": [
+        { "id": "obj_s09_01", "text": "Examine the mirror's enchantments", "completed": false },
+        { "id": "obj_s09_02", "text": "Discover who placed it there and why", "completed": false },
+        { "id": "obj_s09_03", "text": "Remove or destroy the mirror safely", "completed": false }
+      ],
+      "rewards": { "xp": 280, "galleons": 100, "items": ["pensieve_fragment"], "reputation": { "Order of the Phoenix": 10 } },
+      "connected_quests": [],
+      "difficulty": "medium"
+    },
+    {
+      "id": "quest_side_010",
+      "title": "The Last Marauder",
+      "type": "side",
+      "status": "available",
+      "giver": "npc_002",
+      "description": "A scrap of parchment in the Hogwarts library, when examined under moonlight, reveals the original Marauder's Map — but a section labeled 'Chamber of Echoes' has been added in a fifth handwriting. Neither Lupin nor any of the original Marauders wrote it. Someone has been adding to the map.",
+      "objectives": [
+        { "id": "obj_s10_01", "text": "Decode the new section of the map", "completed": false },
+        { "id": "obj_s10_02", "text": "Find the Chamber of Echoes", "completed": false },
+        { "id": "obj_s10_03", "text": "Identify the fifth Marauder", "completed": false }
+      ],
+      "rewards": { "xp": 600, "galleons": 200, "items": ["marauders_map"], "reputation": { "Order of the Phoenix": 25 } },
+      "connected_quests": ["quest_002"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "quest_side_011",
+      "title": "The Hourglass That Wasn't",
+      "type": "side",
+      "status": "available",
+      "giver": "npc_003",
+      "description": "An hourglass in McGonagall's office has been counting down for three weeks. Nobody knows when it was started. Nobody knows what happens when it reaches zero. It has about six hours left.",
+      "objectives": [
+        { "id": "obj_s11_01", "text": "Examine the hourglass without touching it", "completed": false },
+        { "id": "obj_s11_02", "text": "Identify the enchantment's source", "completed": false },
+        { "id": "obj_s11_03", "text": "Stop the countdown before it completes — or let it finish", "completed": false }
+      ],
+      "rewards": { "xp": 550, "galleons": 0, "items": ["time_turner"], "reputation": { "Ministry of Magic": 20 } },
+      "connected_quests": [],
+      "difficulty": "hard"
+    },
+    {
+      "id": "quest_side_012",
+      "title": "Dementor's Apprentice",
+      "type": "side",
+      "status": "available",
+      "giver": "npc_008",
+      "description": "A young Auror trainee has begun manifesting Dementor-like behavior in their sleep — radiating cold, fogging mirrors, leaving the temperature in a room ten degrees colder when they leave. They don't remember it. The Ministry needs to know if this is possession, infection, or something new.",
+      "objectives": [
+        { "id": "obj_s12_01", "text": "Interview the trainee while they're awake", "completed": false },
+        { "id": "obj_s12_02", "text": "Observe them during a sleep cycle safely", "completed": false },
+        { "id": "obj_s12_03", "text": "Identify and resolve the cause", "completed": false }
+      ],
+      "rewards": { "xp": 700, "galleons": 250, "items": ["scroll_patronum"], "reputation": { "Ministry of Magic": 35 } },
+      "connected_quests": ["quest_004"],
+      "difficulty": "hard"
     }
   ]
 }

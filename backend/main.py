@@ -55,6 +55,8 @@ from dialogue_engine import dialogue_engine, DialogueContext
 from encounter_engine import encounter_engine
 from achievements import get_tracker as get_achievement_tracker, ACHIEVEMENTS
 from day_night import get_phase as get_time_phase, time_prompt, night_encounter_multiplier
+from boss_fight import boss_fight, BOSS_NAME
+from potion_brewing import RECIPES, list_recipes, can_brew, brew
 
 # ── App Setup ──────────────────────────────────────────────────────────────────
 
@@ -373,6 +375,95 @@ async def resolve_combat(request: CombatRequest) -> CombatResponse:
             memory.add_key_beat(f"Defeated by {request.enemy.name}. Barely escaped.")
 
     return result
+
+
+# ── Boss Fight (Hollow Mage) ──────────────────────────────────────────────────
+
+@app.post("/api/boss/start")
+async def start_boss_fight(session_id: str):
+    """Begin the scripted Hollow Mage boss encounter."""
+    session = get_or_create_session(session_id)
+    intro = boss_fight.start(session_id)
+    mem = memory_manager.get_or_create(session_id)
+    mem.add_key_beat("Confronted the Hollow Mage at last.")
+    return intro
+
+
+@app.post("/api/boss/round")
+async def boss_round(session_id: str, spell: str):
+    """Resolve one round of boss combat."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        result = boss_fight.resolve_round(
+            session_id, spell,
+            player_hp=session.player.hp,
+            player_max_hp=session.player.max_hp,
+            active_effects=session.player.active_effects,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Update player HP
+    session.player.hp = result.player_hp_remaining
+
+    # Boss defeated → fire huge achievement + XP
+    if result.boss_defeated:
+        from progression import process_xp_gain, xp_to_next, title_for_level
+        boss_xp = 5000
+        new_xp, new_level, _, _ = process_xp_gain(session.player.xp, boss_xp)
+        session.player.xp = new_xp
+        session.player.level = new_level
+        session.player.xp_to_next = xp_to_next(new_xp, new_level)
+        session.player.title = title_for_level(new_level)
+        tracker = get_achievement_tracker(session_id)
+        tracker.on_event("combat_won", {"archetype": "Hollow Mage", "took_damage": True})
+        mem = memory_manager.get_or_create(session_id)
+        mem.add_key_beat("Defeated the Hollow Mage. The Wizarding World is saved.")
+
+    return result
+
+
+@app.get("/api/boss/state/{session_id}")
+async def get_boss_state(session_id: str):
+    state = boss_fight.get_state(session_id)
+    if not state:
+        return {"active": False}
+    return state
+
+
+# ── Potion Brewing ─────────────────────────────────────────────────────────────
+
+@app.get("/api/brewing/recipes")
+async def get_recipes(player_level: int = 1):
+    """List all potion recipes (marks available based on player level)."""
+    return {"recipes": list_recipes(player_level)}
+
+
+@app.post("/api/brewing/brew")
+async def brew_potion(session_id: str, recipe_id: str):
+    """Attempt to brew a potion. Ingredients consumed; success based on level."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    result = brew(recipe_id, session.player.inventory, session.player.level)
+    if result.get("success"):
+        tracker = get_achievement_tracker(session_id)
+        ach = tracker.on_event("potion_brewed", {})
+        if ach:
+            result["achievements_unlocked"] = ach
+    return result
+
+
+@app.get("/api/brewing/can-brew/{recipe_id}")
+async def can_brew_endpoint(recipe_id: str, session_id: str):
+    """Check if the player can brew a recipe right now."""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    can, missing = can_brew(recipe_id, session.player.inventory, session.player.level)
+    return {"can_brew": can, "missing": missing, "recipe_id": recipe_id}
 
 
 # ── Achievements ───────────────────────────────────────────────────────────────
