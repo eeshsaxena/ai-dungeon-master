@@ -64,6 +64,9 @@ npc_memory_store/
 # ── Save files (player game progress — runtime state) ───────────────────────
 backend/saves/
 
+# ── World state (per-session world mutations — runtime state) ────────────────
+backend/world_state/
+
 # ── Jupyter ─────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 *.ipynb

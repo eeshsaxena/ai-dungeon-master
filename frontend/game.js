@@ -467,6 +467,7 @@ async function processPlayerAction(text) {
 
     setTyping(false);
     addNarrativeEntry('dm', response.narrative, response.atmosphere);
+    speakNarrative(response.narrative);
     updateSuggestions(response.suggested_actions || []);
     handleWorldUpdates(response.world_state_updates || {});
     updateEmotionUI(response.detected_emotion, response.difficulty_adjustment);
@@ -1226,6 +1227,67 @@ async function initKnowledgeGraph() {
 // ═══════════════════════════════════════════════════════════════════════════
 // BOTTOM BAR HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════
+// ── Voice / TTS ───────────────────────────────────────────────────────────────
+const VoiceState = {
+  enabled: false,
+  volume: 0.8,
+  ttsProvider: 'disabled',
+  currentAudio: null,
+};
+
+function initVoice() {
+  const toggle = document.getElementById('voice-toggle');
+  const slider = document.getElementById('voice-volume');
+  if (!toggle || !slider) return;
+
+  // Check if TTS is available
+  if (GameState.backendConnected) {
+    Narrator.getTtsStatus().then(status => {
+      VoiceState.ttsProvider = status.provider || 'disabled';
+      if (status.provider !== 'disabled') {
+        toggle.textContent = '🔇 Voice';
+        toggle.title = `DM Voice (${status.provider})`;
+      } else {
+        toggle.textContent = '🔇 No Voice';
+        toggle.title = 'TTS not configured (set TTS_PROVIDER in .env)';
+        toggle.disabled = true;
+      }
+    }).catch(() => {});
+  }
+
+  toggle.addEventListener('click', () => {
+    VoiceState.enabled = !VoiceState.enabled;
+    toggle.textContent = VoiceState.enabled ? '🔊 Voice' : '🔇 Voice';
+    toggle.classList.toggle('active', VoiceState.enabled);
+    if (!VoiceState.enabled && VoiceState.currentAudio) {
+      VoiceState.currentAudio.pause();
+      VoiceState.currentAudio = null;
+    }
+  });
+
+  slider.addEventListener('input', () => {
+    VoiceState.volume = slider.value / 100;
+    if (VoiceState.currentAudio) VoiceState.currentAudio.volume = VoiceState.volume;
+  });
+}
+
+async function speakNarrative(text) {
+  if (!VoiceState.enabled || !GameState.backendConnected) return;
+  if (VoiceState.ttsProvider === 'disabled') return;
+  try {
+    const audioDataUri = await Narrator.textToSpeech(text, GameState.sessionId || '');
+    if (!audioDataUri) return;
+    if (VoiceState.currentAudio) {
+      VoiceState.currentAudio.pause();
+      VoiceState.currentAudio = null;
+    }
+    const audio = new Audio(audioDataUri);
+    audio.volume = VoiceState.volume;
+    VoiceState.currentAudio = audio;
+    audio.play().catch(() => {});   // browser may block autoplay until user gesture
+  } catch {}
+}
+
 function initBottomBarHandlers() {
   document.getElementById('save-btn').addEventListener('click', async () => {
     const btn = document.getElementById('save-btn');
@@ -1300,6 +1362,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initCharacterCreation();
   initInputHandlers();
   initBottomBarHandlers();
+  initVoice();
 
   // Periodic emotion check
   setInterval(async () => {

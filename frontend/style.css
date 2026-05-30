@@ -1726,6 +1726,38 @@ body {
   margin-top: 4px;
 }
 
+/* ── Voice controls ────────────────────────────────────────────────────── */
+.voice-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.voice-toggle { min-width: 90px; }
+.voice-toggle.active {
+  border-color: var(--color-teal);
+  color: var(--color-teal-light);
+  background: rgba(13, 148, 136, 0.1);
+}
+.voice-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 70px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-color);
+  outline: none;
+  cursor: pointer;
+}
+.voice-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-teal-light);
+  cursor: pointer;
+}
+.voice-slider:hover { background: rgba(45, 212, 191, 0.3); }
+
 /* ── SD generating overlay ────────────────────────────────────────────── */
 .sd-generating-overlay {
   position: absolute;
