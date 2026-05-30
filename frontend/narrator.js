@@ -148,6 +148,20 @@ const Narrator = (() => {
 
   // ── Save / Load ─────────────────────────────────────────────────────────
 
+  // ── Dynamic Quests ───────────────────────────────────────────────────────
+
+  async function generateQuest(sessionId, locationId, force = false) {
+    const params = new URLSearchParams({ session_id: sessionId, location_id: locationId, force });
+    const r = await fetch(`${API_BASE}/api/generate-quest?${params}`, { method: 'POST' });
+    if (!r.ok) throw new Error(`Quest gen failed: ${r.status}`);
+    return await r.json();
+  }
+
+  async function getDynamicQuests(sessionId) {
+    const r = await fetch(`${API_BASE}/api/dynamic-quests/${sessionId}`);
+    return await r.json();
+  }
+
   async function saveGame(sessionId) {
     const r = await fetch(`${API_BASE}/api/save/${sessionId}`, { method: 'POST' });
     if (!r.ok) throw new Error(`Save failed: ${r.status}`);
@@ -244,6 +258,8 @@ Behind the bar, Madam Rosmerta polishes a glass and watches your exchange with e
     getQuests,
     generateScene,
     classifyEmotion,
+    generateQuest,
+    getDynamicQuests,
     saveGame,
     listSaves,
     loadGame,

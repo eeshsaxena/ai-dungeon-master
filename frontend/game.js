@@ -57,6 +57,7 @@ const GameState = {
 
   // Quests cache
   quests: [],
+  dynamicQuests: [],   // LLM-generated quests received during play
 };
 
 // XP required to REACH each level (matches backend progression.py, 20 levels)
@@ -263,6 +264,13 @@ async function loadSaveFile(filename) {
     renderQuestLog();
     renderScene(GameState.currentLocation, 'mysterious');
 
+    // Restore dynamic quests for this session from backend
+    try {
+      const dq = await Narrator.getDynamicQuests(GameState.sessionId);
+      GameState.dynamicQuests = dq.quests || [];
+      renderQuestLog();
+    } catch {}
+
     addNarrativeEntry('dm', `✨ *Welcome back, ${data.player.name}!* Your adventure continues where you left off...`, 'warm');
     checkSdStatus();
     document.getElementById('player-input').focus();
@@ -462,6 +470,11 @@ async function processPlayerAction(text) {
     updateSuggestions(response.suggested_actions || []);
     handleWorldUpdates(response.world_state_updates || {});
     updateEmotionUI(response.detected_emotion, response.difficulty_adjustment);
+
+    // Handle dynamically generated quest
+    if (response.new_quest) {
+      addDynamicQuest(response.new_quest);
+    }
 
     // Update scene
     if (response.atmosphere) {
@@ -1002,16 +1015,25 @@ function renderQuestLog() {
 
   const DIFF_EMOJI = { easy: '🟢', medium: '🟡', hard: '🔴', very_hard: '💀', legendary: '⭐' };
 
-  if (GameState.quests.length === 0) {
+  const allQuests = [
+    ...GameState.quests.filter(q => q.status !== 'locked'),
+    ...GameState.dynamicQuests,
+  ];
+
+  if (allQuests.length === 0) {
     list.innerHTML = '<div style="color:var(--text-muted);font-size:0.75rem;padding:8px;text-align:center;font-style:italic">No quests loaded...</div>';
     return;
   }
 
-  GameState.quests.filter(q => q.status !== 'locked').forEach(quest => {
+  allQuests.forEach(quest => {
     const item = document.createElement('div');
-    item.className = `quest-item ${quest.status}`;
+    const isGenerated = quest.generated || quest.type === 'dynamic';
+    item.className = `quest-item ${quest.status}${isGenerated ? ' generated' : ''}`;
     item.innerHTML = `
-      <div class="quest-title-text">${quest.title}</div>
+      <div class="quest-title-text">
+        ${isGenerated ? '<span class="quest-generated-badge">✨</span>' : ''}
+        ${quest.title}
+      </div>
       <div class="quest-status">
         <span class="quest-difficulty">${DIFF_EMOJI[quest.difficulty] || '⬜'} ${quest.difficulty}</span>
         <span>${quest.status === 'completed' ? '✅ Done' : quest.status === 'active' ? '▶️ Active' : '📋 Available'}</span>
@@ -1020,11 +1042,44 @@ function renderQuestLog() {
     item.addEventListener('click', () => showQuestDetails(quest));
     list.appendChild(item);
 
-    // Update quest ticker for first active quest
     if (quest.status === 'active') {
       document.getElementById('quest-ticker-text').textContent = `Active Quest: ${quest.title}`;
     }
   });
+}
+
+// ── Dynamic Quest Handling ────────────────────────────────────────────────────
+
+function addDynamicQuest(quest) {
+  // Avoid duplicates
+  if (GameState.dynamicQuests.some(q => q.id === quest.id || q.title === quest.title)) return;
+  GameState.dynamicQuests.push(quest);
+  renderQuestLog();
+  showQuestDiscoveryToast(quest);
+  // Also weave the hook into the narrative as a DM entry
+  if (quest.hook) {
+    setTimeout(() => {
+      addNarrativeEntry('dm', `📜 *${quest.hook}*\n\n**New Quest Available: ${quest.title}**`, 'mysterious');
+    }, 800);
+  }
+}
+
+function showQuestDiscoveryToast(quest) {
+  const toast = document.getElementById('quest-discovery-toast');
+  const titleEl = document.getElementById('quest-toast-title');
+  const diffEl = document.getElementById('quest-toast-diff');
+  if (!toast) return;
+
+  const DIFF_EMOJI = { easy: '🟢', medium: '🟡', hard: '🔴' };
+  if (titleEl) titleEl.textContent = quest.title;
+  if (diffEl) diffEl.textContent = `${DIFF_EMOJI[quest.difficulty] || '📜'} ${quest.difficulty} · ${quest.rewards?.xp || 0} XP`;
+
+  toast.classList.remove('hidden');
+  toast.classList.add('show');
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.classList.add('hidden'), 400);
+  }, 4000);
 }
 
 function updateInventory() {
