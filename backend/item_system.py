@@ -330,9 +330,14 @@ def item_summary(item: Dict) -> str:
     eff_strs = []
     for e in item.get("effects", []):
         t = e["type"]
-        if t == "heal_hp":        eff_strs.append(f"+{e['amount']} HP")
-        elif t == "restore_mana": eff_strs.append(f"+{e['amount']} MP")
-        elif t == "buff":         eff_strs.append(f"{e['stat']} +{e['amount']} ({e.get('duration',1)} turns)")
-        elif t == "teach_spell":  eff_strs.append(f"Teaches {e['spell']}")
-        elif t == "cleanse":      eff_strs.append("Cleanse")
+        if t == "heal_hp":
+            eff_strs.append(f"+{e['amount']} HP")
+        elif t == "restore_mana":
+            eff_strs.append(f"+{e['amount']} MP")
+        elif t == "buff":
+            eff_strs.append(f"{e['stat']} +{e['amount']} ({e.get('duration',1)} turns)")
+        elif t == "teach_spell":
+            eff_strs.append(f"Teaches {e['spell']}")
+        elif t == "cleanse":
+            eff_strs.append("Cleanse")
     return " | ".join(eff_strs) if eff_strs else "No combat effect"

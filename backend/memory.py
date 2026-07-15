@@ -5,7 +5,6 @@ provides context windows for the LLM narrator.
 """
 import time
 from typing import List, Dict, Optional, Any
-from collections import deque
 
 
 class StoryMemory:

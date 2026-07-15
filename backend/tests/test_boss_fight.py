@@ -1,6 +1,6 @@
 """Tests for boss_fight.py — 3-phase Hollow Mage scripted encounter."""
 import pytest
-from boss_fight import boss_fight, BOSS_HP, PHASE_THRESHOLDS, EFFECTIVE_SPELLS
+from boss_fight import boss_fight, BOSS_HP, PHASE_THRESHOLDS
 
 
 @pytest.fixture(autouse=True)
@@ -84,7 +84,7 @@ def test_phase_transition_at_threshold():
     boss_fight.start("s1")
     state = boss_fight._fights["s1"]
     state.boss_hp = 340   # just above phase 2 threshold of 334
-    result = boss_fight.resolve_round("s1", "Expecto Patronum", 100, 100, [])
+    boss_fight.resolve_round("s1", "Expecto Patronum", 100, 100, [])
     # After taking ~50 damage, should be ~290 → phase 2
     if state.boss_hp <= PHASE_THRESHOLDS[1]["min_hp"]:
         assert state.phase >= 2

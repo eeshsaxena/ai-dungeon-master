@@ -16,11 +16,10 @@ rebuilt from it on first startup then kept hot by VectorStore.
 """
 import json
 import time
-import hashlib
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-from vector_store import VectorStore, embed as vs_embed, EMBED_MODEL
+from vector_store import VectorStore, EMBED_MODEL
 
 STORE_DIR  = Path(__file__).parent / "npc_memory_store"
 STORE_PATH = STORE_DIR / "npc_memories.json"
@@ -54,8 +53,6 @@ class NPCMemoryStore:
         # Cap per-NPC history
         if len(bucket) > MAX_MEMORIES_PER_NPC:
             # Drop oldest — remove them from the vector store too
-            dropped = len(bucket) - MAX_MEMORIES_PER_NPC
-            old_ids = [_mem_id(npc_id, i) for i in range(dropped)]
             if self._store:
                 try:
                     self._store.delete(where={"npc_id": npc_id})

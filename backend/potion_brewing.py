@@ -10,7 +10,7 @@ Usage:
     brew(recipe_id, inventory, player_level) → result with new item or failure
 """
 import random
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 RECIPES: Dict[str, Dict[str, Any]] = {
     "wiggenweld": {

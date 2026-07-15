@@ -1,0 +1,7 @@
+# These two modules must run setup before their imports:
+#  - main.py inserts the backend dir on sys.path and loads .env first
+#  - lora_train/train.py parses CLI args before importing heavy ML deps
+# so module-level imports legitimately follow non-import statements there.
+[lint.per-file-ignores]
+"backend/main.py" = ["E402"]
+"backend/lora_train/train.py" = ["E402"]

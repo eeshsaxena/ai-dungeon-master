@@ -1,7 +1,4 @@
 """Tests for achievements.py — unlock tracking, counter thresholds, persistence."""
-import json
-import tempfile
-from pathlib import Path
 
 import achievements as ach_mod
 from achievements import AchievementTracker, ACHIEVEMENTS
@@ -53,7 +50,6 @@ def test_increment_threshold_unlock(tmp_path):
 def test_combat_won_first_blood(tmp_path):
     t = make_tracker(tmp_path)
     unlocked = t.on_event("combat_won", {"archetype": "Death Eater", "took_damage": True})
-    names = [u["id"] if isinstance(u, dict) else u for u in unlocked]
     assert "first_blood" in [u.get("name") if isinstance(u, dict) else u for u in unlocked] or "first_blood" in str(unlocked)
 
 

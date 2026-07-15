@@ -4,12 +4,10 @@ Connects to Ollama (local) or OpenAI.
 Maintains the Harry Potter Dungeon Master persona.
 """
 import os
-import json
 import httpx
-import random
-from typing import List, Dict, Optional, AsyncGenerator
+from typing import List, Dict, Optional
 from models.schemas import (
-    NarrateRequest, NarrateResponse, EmotionState, DifficultyLevel, PlayerHouse
+    NarrateRequest, NarrateResponse, EmotionState, DifficultyLevel
 )
 
 LLM_PROVIDER    = os.getenv("LLM_PROVIDER",    "ollama")

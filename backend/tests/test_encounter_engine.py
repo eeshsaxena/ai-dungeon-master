@@ -44,7 +44,7 @@ def test_night_boosts_encounter_rate(monkeypatch):
     # Roll just above the day threshold for Forbidden Forest
     monkeypatch.setattr(random, "random", lambda: 0.7)
     # Day: danger 0.65, roll 0.7 → no encounter
-    e_day = encounter_engine.roll("s_day", "loc_004", 5, is_night=False)
+    encounter_engine.roll("s_day", "loc_004", 5, is_night=False)
     # Night: danger 0.65 × 1.5 = 0.975, roll 0.7 → encounter
     e_night = encounter_engine.roll("s_night", "loc_004", 5, is_night=True)
     assert e_night is not None

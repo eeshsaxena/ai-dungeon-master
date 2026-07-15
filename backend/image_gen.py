@@ -204,26 +204,31 @@ def _draw_silhouette(loc, d, w, h, hy, sil, accent, rng):
             d.rectangle([x, ty, x + tw, h], fill=solid)
             d.polygon([(x - 3, ty), (x + tw + 3, ty), (x + tw / 2, ty - th * 0.25)], fill=solid)
             for _ in range(rng.randint(1, 3)):  # lit windows
-                wx = x + rng.randint(4, max(5, tw - 6)); wy = ty + rng.randint(8, max(9, int(th * 0.6)))
+                wx = x + rng.randint(4, max(5, tw - 6))
+                wy = ty + rng.randint(8, max(9, int(th * 0.6)))
                 d.rectangle([wx, wy, wx + 3, wy + 5], fill=glow)
             x += tw + rng.randint(int(w * 0.01), int(w * 0.04))
 
     elif loc == "loc_004":  # Forbidden Forest — trees + eyes
         for _ in range(rng.randint(12, 18)):
-            tx = rng.randint(0, w); tw = rng.randint(int(w * 0.02), int(w * 0.05))
+            tx = rng.randint(0, w)
+            tw = rng.randint(int(w * 0.02), int(w * 0.05))
             th = rng.randint(int(h * 0.25), int(h * 0.55))
             d.polygon([(tx - tw, h), (tx + tw, h), (tx, h - th)], fill=solid)
         for _ in range(2):  # glowing eyes
-            ex = rng.randint(int(w * 0.2), int(w * 0.8)); ey = rng.randint(hy, h - 10)
+            ex = rng.randint(int(w * 0.2), int(w * 0.8))
+            ey = rng.randint(hy, h - 10)
             d.ellipse([ex, ey, ex + 4, ey + 4], fill=(220, 40, 40, 230))
             d.ellipse([ex + 8, ey, ex + 12, ey + 4], fill=(220, 40, 40, 230))
 
     elif loc == "loc_003":  # Knockturn Alley — narrow buildings + green lanterns
         x = 0
         while x < w:
-            bw = rng.randint(int(w * 0.08), int(w * 0.16)); bh = rng.randint(int(h * 0.4), int(h * 0.75))
+            bw = rng.randint(int(w * 0.08), int(w * 0.16))
+            bh = rng.randint(int(h * 0.4), int(h * 0.75))
             d.rectangle([x, h - bh, x + bw, h], fill=solid)
-            lx = x + bw * 0.5; ly = h - bh * rng.uniform(0.3, 0.7)
+            lx = x + bw * 0.5
+            ly = h - bh * rng.uniform(0.3, 0.7)
             d.ellipse([lx - 4, ly - 4, lx + 4, ly + 4], fill=glow)
             x += bw + rng.randint(2, 8)
 
@@ -240,7 +245,8 @@ def _draw_silhouette(loc, d, w, h, hy, sil, accent, rng):
             wx = w * (0.12 + i * 0.3)
             d.rounded_rectangle([wx, h * 0.3, wx + w * 0.16, h * 0.7], radius=12, fill=accent + (90,))
         for _ in range(rng.randint(8, 14)):
-            cx = rng.randint(0, w); cy = rng.randint(int(h * 0.15), int(h * 0.6))
+            cx = rng.randint(0, w)
+            cy = rng.randint(int(h * 0.15), int(h * 0.6))
             d.ellipse([cx, cy, cx + 3, cy + 3], fill=glow)
 
     elif loc == "loc_005":  # Ministry — columns + flying memos
@@ -248,13 +254,15 @@ def _draw_silhouette(loc, d, w, h, hy, sil, accent, rng):
             cx = w * (0.08 + i * 0.16)
             d.rectangle([cx, h * 0.2, cx + w * 0.04, h], fill=solid)
         for _ in range(rng.randint(6, 10)):
-            px = rng.randint(0, w); py = rng.randint(10, int(h * 0.5))
+            px = rng.randint(0, w)
+            py = rng.randint(10, int(h * 0.5))
             d.polygon([(px, py), (px + 10, py + 3), (px, py + 6)], fill=glow)
 
     elif loc == "loc_007":  # Godric's Hollow — gravestones + moon
         d.ellipse([w * 0.1, h * 0.12, w * 0.22, h * 0.30], fill=accent + (110,))
         for _ in range(rng.randint(6, 10)):
-            gx = rng.randint(0, w); gh = rng.randint(int(h * 0.1), int(h * 0.22))
+            gx = rng.randint(0, w)
+            gh = rng.randint(int(h * 0.1), int(h * 0.22))
             d.rounded_rectangle([gx, h - gh, gx + w * 0.04, h], radius=8, fill=solid)
 
     else:  # generic rolling hills
@@ -268,7 +276,8 @@ def _draw_particles(d, w, h, hy, mood, accent, rng):
     if kind == "stars":
         for _ in range(n):
             x, y = rng.randint(0, w), rng.randint(0, hy)
-            a = rng.randint(60, 200); s = rng.choice([1, 1, 2])
+            a = rng.randint(60, 200)
+            s = rng.choice([1, 1, 2])
             d.ellipse([x, y, x + s, y + s], fill=(255, 255, 255, a))
     elif kind == "embers":
         for _ in range(n):

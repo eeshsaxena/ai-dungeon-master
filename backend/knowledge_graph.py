@@ -6,7 +6,7 @@ and their relationships. Exports to D3.js-compatible JSON for visualization.
 import json
 import os
 import networkx as nx
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Optional
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 

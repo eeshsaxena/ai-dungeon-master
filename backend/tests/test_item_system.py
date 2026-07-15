@@ -1,7 +1,7 @@
 """Tests for item_system.py — DB, use effects, loot tables."""
 import pytest
 from item_system import (
-    ITEM_DB, get_item, make_item_instance, use_item,
+    ITEM_DB, make_item_instance, use_item,
     roll_loot, tick_effects, has_buff, LOOT_TABLES
 )
 
