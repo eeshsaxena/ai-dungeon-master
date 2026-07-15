@@ -22,7 +22,6 @@ Usage:
     --no-4bit    Disable 4-bit quantization (uses fp16)
 """
 import argparse
-import os
 from pathlib import Path
 
 # ── Parse args before heavy imports (faster --help) ────────────────────────────
@@ -49,7 +48,8 @@ from transformers import (
 from trl import SFTTrainer
 
 sys_path_parent = str(Path(__file__).parent.parent)
-import sys; sys.path.insert(0, sys_path_parent)
+import sys
+sys.path.insert(0, sys_path_parent)
 from lora_train.dataset_builder import build_dataset, save_dataset, OUT_PATH
 
 
@@ -58,7 +58,7 @@ from lora_train.dataset_builder import build_dataset, save_dataset, OUT_PATH
 def load_data(data_path: str | None) -> Dataset:
     if data_path and Path(data_path).exists():
         import json
-        rows = [json.loads(l) for l in Path(data_path).read_text().splitlines() if l.strip()]
+        rows = [json.loads(line) for line in Path(data_path).read_text().splitlines() if line.strip()]
         print(f"[Train] Loaded {len(rows)} examples from {data_path}")
     else:
         # Build from lore + handcrafted examples

@@ -98,6 +98,6 @@ def test_brew_higher_level_higher_success(monkeypatch):
     # At level 1 (min), base chance is 50%
     # At level 11 (10 above min), capped at 95%
     monkeypatch.setattr(random, "random", lambda: 0.85)  # would fail at low level, pass at high
-    result_low = brew("wiggenweld", inv1, player_level=1)
+    brew("wiggenweld", inv1, player_level=1)
     result_high = brew("wiggenweld", inv2, player_level=11)
     assert result_high["success"] is True

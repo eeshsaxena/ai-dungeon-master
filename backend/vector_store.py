@@ -14,7 +14,6 @@ Usage
 
 The caller never needs to know whether Chroma or numpy is running underneath.
 """
-import hashlib
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -154,7 +153,6 @@ class VectorStore:
         id_set = {doc_id: i for i, doc_id in enumerate(self._ids)}
         vecs = embed(texts, self.model_name)
         for j, doc_id in enumerate(ids):
-            vec = vecs[j] if vecs is not None else None
             if doc_id in id_set:
                 i = id_set[doc_id]
                 self._texts[i] = texts[j]

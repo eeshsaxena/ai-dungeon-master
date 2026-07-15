@@ -8,8 +8,7 @@ fallback when RL is disabled (ENEMY_AI=rule).
 """
 import os
 import random
-import json
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 from models.schemas import CombatAction, EnemyArchetype, Enemy, CombatRequest, CombatResponse
 from rl_agent import rl_agent, encode_state, ACTION_EFFECTS, ACTIONS
 

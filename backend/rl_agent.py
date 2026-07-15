@@ -19,11 +19,10 @@ Unseen states fall back to the rule-based prior so the agent fights sensibly
 from the very first turn, then improves as it gathers experience. Q-tables are
 persisted per enemy archetype so learning survives restarts.
 """
-import os
 import json
 import random
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional
 
 RL_DATA_DIR = Path(__file__).parent / "rl_data"
 Q_TABLE_PATH = RL_DATA_DIR / "q_tables.json"

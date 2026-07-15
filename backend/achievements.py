@@ -151,14 +151,19 @@ class AchievementTracker:
         newly: List[str] = []
 
         if event == "first_action":
-            if self.unlock("first_steps"): newly.append("first_steps")
+            if self.unlock("first_steps"):
+                newly.append("first_steps")
 
         elif event == "combat_won":
-            if self.unlock("first_blood"): newly.append("first_blood")
+            if self.unlock("first_blood"):
+                newly.append("first_blood")
             archetype = payload.get("archetype", "")
-            if archetype == "Death Eater":  newly.extend(self.increment("death_eater_kills"))
-            elif archetype == "Dementor":   newly.extend(self.increment("dementor_kills"))
-            elif archetype == "Boggart":    self.unlock("boggart_buster") and newly.append("boggart_buster")
+            if archetype == "Death Eater":
+                newly.extend(self.increment("death_eater_kills"))
+            elif archetype == "Dementor":
+                newly.extend(self.increment("dementor_kills"))
+            elif archetype == "Boggart":
+                self.unlock("boggart_buster") and newly.append("boggart_buster")
             elif archetype == "Hollow Mage":
                 self.unlock("hollow_mage_defeated") and newly.append("hollow_mage_defeated")
                 self.unlock("story_complete") and newly.append("story_complete")
@@ -174,7 +179,8 @@ class AchievementTracker:
                     newly.append(aid)
 
         elif event == "quest_completed":
-            if self.unlock("quest_starter"): newly.append("quest_starter")
+            if self.unlock("quest_starter"):
+                newly.append("quest_starter")
             newly.extend(self.increment("quests_completed"))
 
         elif event == "item_used":

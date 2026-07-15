@@ -309,7 +309,7 @@ Now respond as {ctx.npc_name}. Return only the JSON object."""
     def _template_opening(self, ctx: DialogueContext) -> Dict:
         GREETINGS = {
             "npc_001": f"*Rosmerta looks up from the glass she's polishing.* 'Well then. Haven't seen you here in a while, {ctx.player_name}. What'll it be — a drink, or information? Both, usually, with people who look the way you do right now.'",
-            "npc_002": f"*Neville straightens up from his notes and extends a hand.* 'Good timing, actually. I've been meaning to talk to someone about this who isn't going to immediately try to write a report.'",
+            "npc_002": "*Neville straightens up from his notes and extends a hand.* 'Good timing, actually. I've been meaning to talk to someone about this who isn't going to immediately try to write a report.'",
             "npc_003": "*McGonagall looks up over her glasses with the expression of someone who has been expecting you.* 'Sit down. I'll come straight to the point, as I'm sure you'd prefer.'",
             "npc_007": "*Firenze turns slowly, starlight in his eyes.* 'You come at the right time. The stars have been speaking of you.'",
         }

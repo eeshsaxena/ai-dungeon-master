@@ -7,14 +7,13 @@ import sys
 import uuid
 import time
 import json
-from typing import Dict, Optional, List
+from typing import Dict, Optional
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -27,9 +26,9 @@ from models.schemas import (
     NarrateRequest, NarrateResponse,
     CombatRequest, CombatResponse,
     EmotionRequest, EmotionResponse,
-    WorldStateResponse, SessionState,
-    PlayerStats, Enemy, EnemyArchetype,
-    DifficultyLevel, EmotionState
+    SessionState,
+    PlayerStats, EnemyArchetype,
+    DifficultyLevel
 )
 from narrator import narrator
 from knowledge_graph import world_graph
@@ -45,18 +44,18 @@ from npc_memory import npc_memory_store
 from save_manager import save_manager
 from progression import process_xp_gain, xp_to_next, title_for_level, spells_for_level
 from quest_generator import quest_generator, QuestContext
-from world_state_store import get_world_state, drop_world_state
+from world_state_store import get_world_state
 from tts_engine import synthesize as tts_synthesize, tts_status, warmup_coqui
 from item_system import (
-    ITEM_DB, get_item, make_item_instance, use_item, roll_loot,
-    inventory_to_display, item_summary, tick_effects
+    ITEM_DB, make_item_instance, use_item, roll_loot,
+    inventory_to_display
 )
 from dialogue_engine import dialogue_engine, DialogueContext
 from encounter_engine import encounter_engine
 from achievements import get_tracker as get_achievement_tracker, ACHIEVEMENTS
-from day_night import get_phase as get_time_phase, time_prompt, night_encounter_multiplier
-from boss_fight import boss_fight, BOSS_NAME
-from potion_brewing import RECIPES, list_recipes, can_brew, brew
+from day_night import get_phase as get_time_phase
+from boss_fight import boss_fight
+from potion_brewing import list_recipes, can_brew, brew
 
 # ── App Setup ──────────────────────────────────────────────────────────────────
 
@@ -382,7 +381,7 @@ async def resolve_combat(request: CombatRequest) -> CombatResponse:
 @app.post("/api/boss/start")
 async def start_boss_fight(session_id: str):
     """Begin the scripted Hollow Mage boss encounter."""
-    session = get_or_create_session(session_id)
+    get_or_create_session(session_id)
     intro = boss_fight.start(session_id)
     mem = memory_manager.get_or_create(session_id)
     mem.add_key_beat("Confronted the Hollow Mage at last.")
@@ -576,7 +575,6 @@ async def give_item_endpoint(session_id: str, item_id: str):
 def _build_dialogue_ctx(session_id: str, npc_id: str, npc_name: str) -> DialogueContext:
     session = get_or_create_session(session_id)
     mem     = memory_manager.get_or_create(session_id)
-    npcs_h  = world_graph.get_npcs_at_location(session.player.current_location)
     memories = npc_memory_store.recall(npc_id, "", top_k=5)
     mem_texts = [m.get("text", "") for m in memories if m.get("text")]
     all_titles = [q.get("title", "") for q in world_graph.get_active_quests() + world_graph.get_available_quests()]
@@ -605,7 +603,7 @@ async def start_dialogue(session_id: str, npc_id: str):
     result = await dialogue_engine.start(ctx)
 
     # Record in NPC memory
-    npc_memory_store.record(npc_id, f"The player started a conversation", session_id)
+    npc_memory_store.record(npc_id, "The player started a conversation", session_id)
     return result
 
 
@@ -836,7 +834,7 @@ async def classify_emotion(request: EmotionRequest) -> EmotionResponse:
 
 
 @app.get("/api/world-state")
-async def get_world_state(session_id: Optional[str] = None) -> dict:
+async def get_world_state_graph(session_id: Optional[str] = None) -> dict:
     """Export world graph for D3.js visualization."""
     session = sessions.get(session_id) if session_id else None
     player_location = session.player.current_location if session else "loc_001"
@@ -1054,7 +1052,7 @@ async def startup():
     print(f"   LLM Provider: {os.getenv('LLM_PROVIDER', 'ollama')}")
     print(f"   Ollama Model: {os.getenv('OLLAMA_MODEL', 'llama3.2')}")
     print(f"   Image Provider: {os.getenv('IMAGE_PROVIDER', 'placeholder')}")
-    print(f"   World: The Wizarding World (Harry Potter)")
+    print("   World: The Wizarding World (Harry Potter)")
     print(f"   Frontend: {FRONTEND_DIR}")
     # Warm the RAG index so the first narration isn't slow
     try:

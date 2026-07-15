@@ -14,7 +14,7 @@ Storage: backend/world_state/<session_id>.json (gitignored)
 import json
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Set
 
 STATE_DIR = Path(__file__).parent / "world_state"
 STATE_DIR.mkdir(exist_ok=True)

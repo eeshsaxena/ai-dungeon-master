@@ -139,7 +139,8 @@ def _synth_coqui(text: str) -> Optional[bytes]:
 def _synth_pyttsx3(text: str) -> Optional[bytes]:
     try:
         import pyttsx3
-        import tempfile, os as _os
+        import tempfile
+        import os as _os
         engine = pyttsx3.init()
         engine.setProperty("rate", 160)
         engine.setProperty("volume", 0.9)

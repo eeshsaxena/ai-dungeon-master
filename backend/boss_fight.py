@@ -146,13 +146,12 @@ class BossFight:
         )
 
         state.rounds += 1
-        prior_phase = state.phase
 
         # ── Player attacks the boss ──
         spell_damage = self._compute_damage(spell, state.phase, elder_wand_active)
         narrative_lines = [f"You cast {spell}."]
         if spell_damage <= 0:
-            narrative_lines.append(f"It has no real effect — the Mage absorbs it without flinching.")
+            narrative_lines.append("It has no real effect — the Mage absorbs it without flinching.")
         else:
             state.boss_hp = max(0, state.boss_hp - spell_damage)
             narrative_lines.append(f"The spell strikes home for {spell_damage} damage.")

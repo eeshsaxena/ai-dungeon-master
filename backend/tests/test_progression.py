@@ -1,7 +1,7 @@
 """Tests for backend/progression.py — XP curve, level-up, spell unlocks."""
 from progression import (
     process_xp_gain, xp_to_next, title_for_level, spells_for_level,
-    level_from_xp, XP_THRESHOLDS, SPELL_UNLOCKS
+    level_from_xp, XP_THRESHOLDS
 )
 
 
